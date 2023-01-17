@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import matplotlib.pyplot as plt
 import numpy as np
 import yaml
-from pydantic import BaseModel, Extra, Field, validator, parse_obj_as
+from pydantic import BaseModel, Extra, Field, validator, parse_obj_as, conlist
 from pydantic.fields import PrivateAttr
 
 from frigate.const import (
@@ -163,6 +163,17 @@ class MotionConfig(FrigateBaseModel):
     mqtt_off_delay: int = Field(
         default=30,
         title="Delay for updating MQTT with no motion detected.",
+    )
+
+
+class CalibrationConfig(FrigateBaseModel):
+    scale_factor: Optional[float] = Field(
+        default=None,
+        title="Distance Coefficient",
+    )
+    homography_matrix: Optional[List[List[float]]] = Field(
+        default=None,
+        title="Homography Matrix",
     )
 
 
@@ -603,6 +614,7 @@ class CameraConfig(FrigateBaseModel):
     timestamp_style: TimestampStyleConfig = Field(
         default_factory=TimestampStyleConfig, title="Timestamp style configuration."
     )
+    calibration: Optional[CalibrationConfig] = Field(title="Calibration configuration.")
     _ffmpeg_cmds: List[Dict[str, List[str]]] = PrivateAttr()
 
     def __init__(self, **config):
@@ -877,6 +889,7 @@ class FrigateConfig(FrigateBaseModel):
         default_factory=TimestampStyleConfig,
         title="Global timestamp style configuration.",
     )
+    # calibration: Optional[CalibrationConfig] = Field(title="Calibration configuration.")
 
     @property
     def runtime_config(self) -> FrigateConfig:

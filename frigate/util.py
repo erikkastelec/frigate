@@ -166,6 +166,111 @@ def draw_timestamp(
     )
 
 
+def draw_circle_around_bounding_box(img, bbox, diameter, color, H, scale_factor):
+    """
+    Draws a circle around a bounding box.
+    The diameter of the circle is provided in meters, and it is converted to pixels.
+    The center of the circle is the center of the bottom of the bounding box.
+    The color of the circle is red.
+
+    Parameters:
+        - img (ndarray): The image on which to draw the circle
+        - bbox (Tuple[float, float, float, float]): The bounding box represented as (x1, y1, x2, y2)
+        - diameter (float): The diameter of the circle in meters
+        - H (ndarray): The homography matrix
+        - scale_factor (float): The scale factor to convert the distance from pixels to meters
+
+    Returns:
+        - img (ndarray): The image with the drawn circle
+    """
+    if not isinstance(H, np.ndarray):
+        H = np.array(H)
+    # Compute the center of the bottom of the bounding box
+    center = (int((bbox[0] + bbox[2]) / 2), int(bbox[3]))
+    # Transform the center point to the bird's-eye view coordinates
+    center = cv2.perspectiveTransform(np.array([[center]], dtype=np.float32), H)[0][0]
+    # Convert the diameter from meters to pixels
+    diameter_pixels = diameter / scale_factor
+    # Draw the circle
+    cv2.circle(
+        img, (int(center[0]), int(center[1])), int(diameter_pixels / 2), color, 2
+    )
+    return img
+
+
+# TODO: FIX
+def draw_line_between_bounding_boxes(img, bbox1, bbox2, distance, threshold_distance=2):
+    """
+    Draws a line between two bounding boxes.
+    The distance between the bounding boxes is written in the middle of the line.
+    If the distance is lower than the threshold distance, the line is red, otherwise it's green.
+
+    Parameters:
+        - img (ndarray): The image on which to draw the line
+        - bbox1 (Tuple[float, float, float, float]): The first bounding box represented as (x1, y1, x2, y2)
+        - bbox2 (Tuple[float, float, float, float]): The second bounding box represented as (x1, y1, x2, y2)
+        - distance (float): The distance between the bounding boxes
+        - threshold_distance (float): The threshold distance for the line color. Default is 2.
+
+    Returns:
+        - img (ndarray): The image with the drawn line
+    """
+    # Compute the middle bottom points of the bounding boxes
+    point1 = (int((bbox1[0] + bbox1[2]) / 2), int(bbox1[3]))
+    point2 = (int((bbox2[0] + bbox2[2]) / 2), int(bbox2[3]))
+    # Draw the line between the points
+    color = (0, 255, 0) if distance >= threshold_distance else (0, 0, 255)
+    cv2.line(img, point1, point2, color, 2)
+    # Draw the distance in the middle of the line
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    cv2.putText(
+        img,
+        f"{distance:.2f}",
+        (int((point1[0] + point2[0]) / 2), int((point1[1] + point2[1]) / 2)),
+        font,
+        0.5,
+        color,
+        2,
+    )
+    return img
+
+
+def calculate_distance_between_bounding_boxes(bbox1, bbox2, H, scale_factor):
+    """
+    Calculates the distance between two bounding boxes in the bird's-eye view.
+
+    Parameters:
+        - bbox1 (Tuple[float, float, float, float]): The first bounding box represented as (x1, y1, x2, y2)
+        - bbox2 (Tuple[float, float, float, float]): The second bounding box represented as (x1, y1, x2, y2)
+        - H (ndarray): The homography matrix that maps the perspective image to the bird's-eye view
+        - scale_factor (float): Scale factor for the distance calculation in the bird's-eye view
+
+    Returns:
+        - distance (float): The distance between the bounding boxes in the bird's-eye view
+    """
+    if not isinstance(H, np.ndarray):
+        H = np.array(H)
+    # Compute the middle bottom points of the bounding boxes
+    point1 = ((bbox1[0] + bbox1[2]) / 2, bbox1[3])
+    point2 = ((bbox2[0] + bbox2[2]) / 2, bbox2[3])
+
+    # Transform the points to the bird's-eye view coordinates
+    point1 = cv2.perspectiveTransform(np.array([[point1]], dtype=np.float32), H)[0][0]
+    point2 = cv2.perspectiveTransform(np.array([[point2]], dtype=np.float32), H)[0][0]
+    # Convert the points to numpy arrays and take the difference between them
+    point1 = np.array(point1, dtype=np.float32)
+    point2 = np.array(point2, dtype=np.float32)
+    diff = np.subtract(point1, point2)
+
+    # Calculate the distance between the points
+    distance = np.linalg.norm(diff)
+
+    # Scale the distance to the correct size in the bird's-eye view
+    distance *= scale_factor
+
+    return distance
+
+
 def draw_box_with_label(
     frame,
     x_min,

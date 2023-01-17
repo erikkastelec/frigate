@@ -26,6 +26,9 @@ from frigate.util import (
     calculate_region,
     draw_box_with_label,
     draw_timestamp,
+    calculate_distance_between_bounding_boxes,
+    draw_line_between_bounding_boxes,
+    draw_circle_around_bounding_box,
 )
 
 logger = logging.getLogger(__name__)
@@ -397,6 +400,43 @@ class CameraState:
                 else:
                     thickness = 1
                     color = (255, 0, 0)
+
+                close_contact = False
+                for other_obj in tracked_objects.values():
+                    if (
+                        obj == other_obj
+                        or obj["frame_time"] != frame_time
+                        or other_obj["frame_time"] != frame_time
+                        or obj["label"] != other_obj["label"]
+                    ):
+                        continue
+                    distance_between_bboxes = calculate_distance_between_bounding_boxes(
+                        obj["box"],
+                        other_obj["box"],
+                        self.camera_config.calibration.homography_matrix,
+                        self.camera_config.calibration.scale_factor,
+                    )
+
+                    draw_line_between_bounding_boxes(
+                        frame_copy,
+                        obj["box"],
+                        other_obj["box"],
+                        distance_between_bboxes,
+                    )
+                    if distance_between_bboxes < 2:
+                        close_contact = True
+                circle_color = (0, 255, 0)
+                if close_contact:
+                    circle_color = (0, 0, 255)
+
+                # draw_circle_around_bounding_box(
+                #     frame_copy,
+                #     obj["box"],
+                #     2,
+                #     circle_color,
+                #     self.camera_config.calibration.homography_matrix,
+                #     self.camera_config.calibration.scale_factor,
+                # )
 
                 # draw the bounding boxes on the frame
                 box = obj["box"]
