@@ -21,6 +21,8 @@ import numpy as np
 import os
 import psutil
 
+from scipy.spatial.distance import cdist
+
 from frigate.const import REGEX_HTTP_CAMERA_USER_PASS, REGEX_RTSP_CAMERA_USER_PASS
 
 logger = logging.getLogger(__name__)
@@ -196,6 +198,160 @@ def draw_circle_around_bounding_box(img, bbox, diameter, color, H, scale_factor)
         img, (int(center[0]), int(center[1])), int(diameter_pixels / 2), color, 2
     )
     return img
+
+
+# def find_close_bboxes(bboxes, H, scale_factor, threshold):
+#     """
+#     Finds all pairs of bounding boxes whose bottom middle points are closer than a threshold distance in meters.
+#     The distance is calculated in the reference frame defined by the provided homography matrix.
+
+#     Parameters:
+#     - bboxes (numpy array): List of bounding boxes represented as an array of shape (n, 4) where each row is
+#                             in the format [x1, y1, x2, y2]
+#     - homography (numpy array): A 3x3 homography matrix defining the transformation from image to world coordinates.
+#     - scale_factor (float): Scale factor to convert pixels to meters
+#     - threshold (float): Maximum allowed distance between bottom middle points of bounding boxes in meters
+
+#     Returns:
+#     - close_pairs (numpy array): List of pairs of indices of close bounding boxes in the format [i, j] where i != j
+#     """
+#     if not isinstance(H, np.ndarray):
+#         H = np.array(H)
+#     if not isinstance(bboxes, np.ndarray):
+#         bboxes = np.array(bboxes)
+#     if len(bboxes) <= 1:
+#         return np.array([])
+#     # Calculate bottom middle point of bounding boxes
+#     boxes_points = np.zeros((len(bboxes), 2))
+#     for i, bbox in enumerate(bboxes):
+#         boxes_points[i] = (
+#             (bbox[0] + bbox[2]) / 2,
+#             bbox[3],
+#         )
+#     # Transform bottom middle points to world coordinates
+#     boxes_points = cv2.perspectiveTransform(
+#         np.array([boxes_points], dtype=np.float32), H
+#     )[0]
+#     # Calculate distance matrix between all points
+
+#     # # Convert bounding boxes to homogeneous coordinates
+#     # bboxes_homog = np.hstack((bboxes[:, :2], np.ones((len(bboxes), 1)))).T
+#     # # Apply homography transformation
+#     # bboxes_homog = np.matmul(H, bboxes_homog)
+#     # # Convert back to non-homogeneous coordinates and scale
+#     # bboxes_transformed = (bboxes_homog[:2, :] / bboxes_homog[2, :]).T * scale_factor
+#     # # Calculate bottom middle point of each bounding box
+#     # width_height = (bboxes_transformed[:, 2:4] - bboxes_transformed[:, :2]) / 2
+#     # bboxes_bottom_middle = bboxes_transformed[:, :2] + width_height
+
+#     # # Use scipy's cdist function to calculate the distance matrix between all points
+#     distance_matrix = cdist(boxes_points, boxes_points)
+#     # Identify pairs of bounding boxes that are closer than the threshold
+#     close_pairs = np.argwhere(distance_matrix < threshold)
+#     # let close_pairs contain original bounding box instead of converted points
+
+#     return close_pairs
+
+
+def find_close_bboxes(bboxes, homography, scale_factor, threshold):
+    """
+    Finds all pairs of bounding boxes whose bottom middle points are closer than a threshold distance in meters.
+    The distance is calculated in the reference frame defined by the provided homography matrix.
+
+    Parameters:
+    - bboxes (numpy array): List of bounding boxes represented as an array of shape (n, 4) where each row is
+                            in the format [x1, y1, x2, y2]
+    - homography (numpy array): A 3x3 homography matrix defining the transformation from image to world coordinates.
+    - scale_factor (float): Scale factor to convert pixels to meters
+    - threshold (float): Maximum allowed distance between bottom middle points of bounding boxes in meters
+
+    Returns:
+    - close_pairs (numpy array): List of pairs of close bounding boxes in the format [[x1, y1, x2, y2], [x1, y1, x2, y2]]
+    - distances (numpy array): List of distances between the close bounding boxes
+    """
+    if len(bboxes) <= 1:
+        return np.array([])
+    if not isinstance(homography, np.ndarray):
+        homography = np.array(homography)
+    if not isinstance(bboxes, np.ndarray):
+        bboxes = np.array(bboxes)
+    # Calculate bottom middle point of each bounding box in image coordinates
+    width_height = (bboxes[:, 2:4] - bboxes[:, :2]) / 2
+    bboxes_bottom_middle = bboxes[:, :2] + width_height
+    # Convert to homogeneous coordinates
+    bboxes_bottom_middle_homog = np.hstack(
+        (bboxes_bottom_middle, np.ones((len(bboxes), 1)))
+    ).T
+    # Apply homography transformation
+    bboxes_bottom_middle_transformed_homog = np.matmul(
+        homography, bboxes_bottom_middle_homog
+    )
+    # Convert back to non-homogeneous coordinates and scale
+    bboxes_bottom_middle_transformed = (
+        bboxes_bottom_middle_transformed_homog[:2, :]
+        / bboxes_bottom_middle_transformed_homog[2, :]
+    ).T * scale_factor
+    # Use scipy's cdist function to calculate the distance matrix between all bottom middle points
+    distance_matrix = cdist(
+        bboxes_bottom_middle_transformed, bboxes_bottom_middle_transformed
+    )
+    # Get upper triangle of the distance matrix
+    upper_tri = np.triu_indices(len(bboxes), 1)
+    # Get indices of pairs of close bounding boxes
+    indices = np.argwhere(distance_matrix[upper_tri] < threshold)
+    close_pairs = [(upper_tri[0][i], upper_tri[1][i]) for i in indices]
+
+    # Get distances of pairs of close bounding boxes
+    distances = distance_matrix[upper_tri][distance_matrix[upper_tri] < threshold]
+    if len(close_pairs) == 0 or distances.size == 0:
+        return []
+    return [
+        (bboxes[i[0]][0], bboxes[i[1]][0], d) for i, d in zip(close_pairs, distances)
+    ]
+
+
+def draw_bounding_boxes_on_birds_eye_view(img, bboxes, diameter, H, scale_factor):
+    """
+    Draws bounding boxes and circles on a bird's eye view image.
+    The bounding boxes are represented as red dots and circles are represented as circles with diameter provided in meters.
+    The center of the bounding boxes and circles is the center of the bottom of the bounding box.
+
+    Parameters:
+        - img (ndarray): The image on which to draw the bounding boxes and circles
+        - bboxes (List[Tuple[float, float, float, float]]): List of bounding boxes represented as (x1, y1, x2, y2)
+        - diameter (float): Diameter of the circles in meters
+        - H (ndarray): The homography matrix
+        - scale_factor (float): The scale factor to convert the distance from pixels to meters
+
+    Returns:
+        - img (ndarray): The bird's eye view image with the drawn bounding boxes and circles
+    """
+    if not isinstance(H, np.ndarray):
+        H = np.array(H)
+    # Create a black background image
+    birdseye_view = np.zeros((img.shape[0], img.shape[1], 3), np.uint8)
+    # Draw bounding boxes as red dots
+    for bbox in bboxes:
+        center = (int((bbox[0] + bbox[2]) / 2), int(bbox[3]))
+        center = cv2.perspectiveTransform(np.array([[center]], dtype=np.float32), H)[0][
+            0
+        ]
+        cv2.circle(birdseye_view, (int(center[0]), int(center[1])), 2, (0, 0, 255), -1)
+    # Draw circles as circles
+    for bbox in bboxes:
+        center = (int((bbox[0] + bbox[2]) / 2), int(bbox[3]))
+        center = cv2.perspectiveTransform(np.array([[center]], dtype=np.float32), H)[0][
+            0
+        ]
+        diameter_pixels = diameter / scale_factor
+        cv2.circle(
+            birdseye_view,
+            (int(center[0]), int(center[1])),
+            int(diameter_pixels / 2),
+            (0, 255, 0),
+            2,
+        )
+    return birdseye_view
 
 
 # TODO: FIX

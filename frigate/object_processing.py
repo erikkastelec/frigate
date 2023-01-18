@@ -29,6 +29,8 @@ from frigate.util import (
     calculate_distance_between_bounding_boxes,
     draw_line_between_bounding_boxes,
     draw_circle_around_bounding_box,
+    draw_bounding_boxes_on_birds_eye_view,
+    find_close_bboxes,
 )
 
 logger = logging.getLogger(__name__)
@@ -402,33 +404,43 @@ class CameraState:
                     color = (255, 0, 0)
 
                 close_contact = False
-                for other_obj in tracked_objects.values():
-                    if (
-                        obj == other_obj
-                        or obj["frame_time"] != frame_time
-                        or other_obj["frame_time"] != frame_time
-                        or obj["label"] != other_obj["label"]
-                    ):
-                        continue
-                    distance_between_bboxes = calculate_distance_between_bounding_boxes(
-                        obj["box"],
-                        other_obj["box"],
-                        self.camera_config.calibration.homography_matrix,
-                        self.camera_config.calibration.scale_factor,
-                    )
+                # for other_obj in tracked_objects.values():
+                #     if (
+                #         obj == other_obj
+                #         or obj["frame_time"] != frame_time
+                #         or other_obj["frame_time"] != frame_time
+                #         or obj["label"] != other_obj["label"]
+                #     ):
+                #         continue
+                #     distance_between_bboxes = calculate_distance_between_bounding_boxes(
+                #         obj["box"],
+                #         other_obj["box"],
+                #         self.camera_config.calibration.homography_matrix,
+                #         self.camera_config.calibration.scale_factor,
+                #     )
 
-                    draw_line_between_bounding_boxes(
-                        frame_copy,
-                        obj["box"],
-                        other_obj["box"],
-                        distance_between_bboxes,
-                    )
-                    if distance_between_bboxes < 2:
-                        close_contact = True
-                circle_color = (0, 255, 0)
-                if close_contact:
-                    circle_color = (0, 0, 255)
-
+                #     draw_line_between_bounding_boxes(
+                #         frame_copy,
+                #         obj["box"],
+                #         other_obj["box"],
+                #         distance_between_bboxes,
+                #     )
+                #     if distance_between_bboxes < 2:
+                #         close_contact = True
+                # frame_copy = draw_bounding_boxes_on_birds_eye_view(
+                #     frame_copy,
+                #     [
+                #         obj["box"]
+                #         for obj in tracked_objects.values()
+                #         if obj["frame_time"] == frame_time
+                #     ],
+                #     1,
+                #     self.camera_config.calibration.homography_matrix,
+                #     self.camera_config.calibration.scale_factor,
+                # )
+                # circle_color = (0, 255, 0)
+                # if close_contact:
+                #     circle_color = (0, 0, 255)
                 # draw_circle_around_bounding_box(
                 #     frame_copy,
                 #     obj["box"],
@@ -450,6 +462,26 @@ class CameraState:
                     f"{obj['score']:.0%} {int(obj['area'])}",
                     thickness=thickness,
                     color=color,
+                )
+        close_bboxes = find_close_bboxes(
+            [
+                obj["box"]
+                for obj in tracked_objects.values()
+                if obj["frame_time"] == frame_time
+            ],
+            self.camera_config.calibration.homography_matrix,
+            self.camera_config.calibration.scale_factor,
+            2.0,
+        )
+        # Use draw_line_between_bounding_boxes to draw lines between close bboxes if there are any
+        if close_bboxes:
+            for bbox1, bbox2, distance in close_bboxes:
+                draw_line_between_bounding_boxes(
+                    frame_copy,
+                    bbox1,
+                    bbox2,
+                    distance,
+                    2,
                 )
 
         if draw_options.get("regions"):
