@@ -99,6 +99,7 @@ class RetainModeEnum(str, Enum):
     all = "all"
     motion = "motion"
     active_objects = "active_objects"
+    close_contacts = "close_contacts"
 
 
 class RetainConfig(FrigateBaseModel):
@@ -792,6 +793,7 @@ def verify_recording_retention(camera_config: CameraConfig) -> None:
         RetainModeEnum.all: 0,
         RetainModeEnum.motion: 1,
         RetainModeEnum.active_objects: 2,
+        RetainModeEnum.close_contacts: 3,
     }
 
     if (

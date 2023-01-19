@@ -302,7 +302,8 @@ class EventCleanup(threading.Thread):
 
     def run(self) -> None:
         # only expire events every 5 minutes
-        while not self.stop_event.wait(300):
+        # TODO: CHANGE BACK TO 300
+        while not self.stop_event.wait(30):
             self.expire("clips")
             self.expire("snapshots")
             self.purge_duplicates()

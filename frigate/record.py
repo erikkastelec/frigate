@@ -237,6 +237,8 @@ class RecordingMaintainer(threading.Thread):
     def segment_stats(self, camera, start_time, end_time):
         active_count = 0
         motion_count = 0
+        # TODO - add close contact count
+        close_contacts_count = 0
         for frame in self.recordings_info[camera]:
             # frame is after end time of segment
             if frame[0] > end_time.timestamp():
@@ -252,10 +254,13 @@ class RecordingMaintainer(threading.Thread):
                     if not o["false_positive"] and o["motionless_count"] == 0
                 ]
             )
+            close_contacts_count += len([o["close_contacts"] for o in frame[1]])
+            # logger.error([o["close_contacts"] for o in frame[3]])
+            # close_contacts_count += sum(len(o["close_contacts"]) for o in frame[2])
 
             motion_count += sum([area(box) for box in frame[2]])
 
-        return (motion_count, active_count)
+        return (motion_count, active_count, close_contacts_count)
 
     def store_segment(
         self,
@@ -266,11 +271,19 @@ class RecordingMaintainer(threading.Thread):
         cache_path,
         store_mode: RetainModeEnum,
     ):
-        motion_count, active_count = self.segment_stats(camera, start_time, end_time)
+        motion_count, active_count, close_contacts_count = self.segment_stats(
+            camera, start_time, end_time
+        )
 
         # check if the segment shouldn't be stored
+
         if (store_mode == RetainModeEnum.motion and motion_count == 0) or (
-            store_mode == RetainModeEnum.active_objects and active_count == 0
+            store_mode == RetainModeEnum.active_objects
+            and active_count == 0
+            or (
+                store_mode == RetainModeEnum.close_contacts
+                and close_contacts_count == 0
+            )
         ):
             Path(cache_path).unlink(missing_ok=True)
             self.end_time_cache.pop(cache_path, None)
@@ -346,6 +359,7 @@ class RecordingMaintainer(threading.Thread):
                     motion=motion_count,
                     # TODO: update this to store list of active objects at some point
                     objects=active_count,
+                    close_contacts=close_contacts_count,
                     segment_size=segment_size,
                 )
         except Exception as e:
@@ -509,6 +523,11 @@ class RecordingCleanup(threading.Thread):
                         config.record.events.retain.mode
                         == RetainModeEnum.active_objects
                         and recording.objects == 0
+                    )
+                    or (
+                        config.record.events.retain.mode
+                        == RetainModeEnum.close_contacts
+                        and recording.close_contacts == 0
                     )
                 ):
                     Path(recording.path).unlink(missing_ok=True)

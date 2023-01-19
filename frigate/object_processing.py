@@ -87,7 +87,9 @@ class TrackedObject:
         self.last_updated = 0
         self.last_published = 0
         self.frame = None
+        self.close_contacts = set()
         self.previous = self.to_dict()
+        # TODO: find a better way (keep who was in close contact?)
 
         # start the score history
         self.score_history = [self.obj_data["score"]]
@@ -206,6 +208,7 @@ class TrackedObject:
             > self.camera_config.detect.stationary.threshold,
             "motionless_count": self.obj_data["motionless_count"],
             "position_changes": self.obj_data["position_changes"],
+            "close_contacts": self.obj_data["close_contacts"],
             "current_zones": self.current_zones.copy(),
             "entered_zones": self.entered_zones.copy(),
             "has_clip": self.has_clip,
@@ -403,7 +406,6 @@ class CameraState:
                     thickness = 1
                     color = (255, 0, 0)
 
-                close_contact = False
                 # for other_obj in tracked_objects.values():
                 #     if (
                 #         obj == other_obj
@@ -465,7 +467,7 @@ class CameraState:
                 )
         close_bboxes = find_close_bboxes(
             [
-                obj["box"]
+                (obj["box"], obj["id"])
                 for obj in tracked_objects.values()
                 if obj["frame_time"] == frame_time
             ],
@@ -475,7 +477,7 @@ class CameraState:
         )
         # Use draw_line_between_bounding_boxes to draw lines between close bboxes if there are any
         if close_bboxes:
-            for bbox1, bbox2, distance in close_bboxes:
+            for bbox1, bbox2, id1, id2, distance in close_bboxes:
                 draw_line_between_bounding_boxes(
                     frame_copy,
                     bbox1,
@@ -483,6 +485,8 @@ class CameraState:
                     distance,
                     2,
                 )
+                self.tracked_objects[id1].close_contacts.add(id2)
+                self.tracked_objects[id2].close_contacts.add(id1)
 
         if draw_options.get("regions"):
             for region in regions:
@@ -701,6 +705,14 @@ class CameraState:
             self.previous_frame_id = frame_id
 
 
+# TODO: move to more appropriate location
+def serialize_sets(obj):
+    if isinstance(obj, set):
+        return list(obj)
+
+    return obj
+
+
 class TrackedObjectProcessor(threading.Thread):
     def __init__(
         self,
@@ -739,7 +751,12 @@ class TrackedObjectProcessor(threading.Thread):
                 "after": after,
                 "type": "new" if obj.previous["false_positive"] else "update",
             }
-            self.dispatcher.publish("events", json.dumps(message), retain=False)
+
+            self.dispatcher.publish(
+                "events",
+                json.dumps(message, default=serialize_sets),
+                retain=False,
+            )
             obj.previous = after
             self.event_queue.put(
                 ("update", camera, obj.to_dict(include_thumbnail=True))
@@ -792,7 +809,9 @@ class TrackedObjectProcessor(threading.Thread):
                     "after": obj.to_dict(),
                     "type": "end",
                 }
-                self.dispatcher.publish("events", json.dumps(message), retain=False)
+                self.dispatcher.publish(
+                    "events", json.dumps(message, default=serialize_sets), retain=False
+                )
 
             self.event_queue.put(("end", camera, obj.to_dict(include_thumbnail=True)))
 

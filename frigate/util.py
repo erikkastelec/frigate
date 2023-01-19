@@ -200,87 +200,33 @@ def draw_circle_around_bounding_box(img, bbox, diameter, color, H, scale_factor)
     return img
 
 
-# def find_close_bboxes(bboxes, H, scale_factor, threshold):
-#     """
-#     Finds all pairs of bounding boxes whose bottom middle points are closer than a threshold distance in meters.
-#     The distance is calculated in the reference frame defined by the provided homography matrix.
-
-#     Parameters:
-#     - bboxes (numpy array): List of bounding boxes represented as an array of shape (n, 4) where each row is
-#                             in the format [x1, y1, x2, y2]
-#     - homography (numpy array): A 3x3 homography matrix defining the transformation from image to world coordinates.
-#     - scale_factor (float): Scale factor to convert pixels to meters
-#     - threshold (float): Maximum allowed distance between bottom middle points of bounding boxes in meters
-
-#     Returns:
-#     - close_pairs (numpy array): List of pairs of indices of close bounding boxes in the format [i, j] where i != j
-#     """
-#     if not isinstance(H, np.ndarray):
-#         H = np.array(H)
-#     if not isinstance(bboxes, np.ndarray):
-#         bboxes = np.array(bboxes)
-#     if len(bboxes) <= 1:
-#         return np.array([])
-#     # Calculate bottom middle point of bounding boxes
-#     boxes_points = np.zeros((len(bboxes), 2))
-#     for i, bbox in enumerate(bboxes):
-#         boxes_points[i] = (
-#             (bbox[0] + bbox[2]) / 2,
-#             bbox[3],
-#         )
-#     # Transform bottom middle points to world coordinates
-#     boxes_points = cv2.perspectiveTransform(
-#         np.array([boxes_points], dtype=np.float32), H
-#     )[0]
-#     # Calculate distance matrix between all points
-
-#     # # Convert bounding boxes to homogeneous coordinates
-#     # bboxes_homog = np.hstack((bboxes[:, :2], np.ones((len(bboxes), 1)))).T
-#     # # Apply homography transformation
-#     # bboxes_homog = np.matmul(H, bboxes_homog)
-#     # # Convert back to non-homogeneous coordinates and scale
-#     # bboxes_transformed = (bboxes_homog[:2, :] / bboxes_homog[2, :]).T * scale_factor
-#     # # Calculate bottom middle point of each bounding box
-#     # width_height = (bboxes_transformed[:, 2:4] - bboxes_transformed[:, :2]) / 2
-#     # bboxes_bottom_middle = bboxes_transformed[:, :2] + width_height
-
-#     # # Use scipy's cdist function to calculate the distance matrix between all points
-#     distance_matrix = cdist(boxes_points, boxes_points)
-#     # Identify pairs of bounding boxes that are closer than the threshold
-#     close_pairs = np.argwhere(distance_matrix < threshold)
-#     # let close_pairs contain original bounding box instead of converted points
-
-#     return close_pairs
-
-
 def find_close_bboxes(bboxes, homography, scale_factor, threshold):
     """
     Finds all pairs of bounding boxes whose bottom middle points are closer than a threshold distance in meters.
     The distance is calculated in the reference frame defined by the provided homography matrix.
 
     Parameters:
-    - bboxes (numpy array): List of bounding boxes represented as an array of shape (n, 4) where each row is
-                            in the format [x1, y1, x2, y2]
+    - bboxes (list): List of tuples where each tuple is in the format (bbox, id) where bbox is represented as a list of 4 elements in the format [x1, y1, x2, y2] and id is the id of the object
     - homography (numpy array): A 3x3 homography matrix defining the transformation from image to world coordinates.
     - scale_factor (float): Scale factor to convert pixels to meters
     - threshold (float): Maximum allowed distance between bottom middle points of bounding boxes in meters
 
     Returns:
-    - close_pairs (numpy array): List of pairs of close bounding boxes in the format [[x1, y1, x2, y2], [x1, y1, x2, y2]]
-    - distances (numpy array): List of distances between the close bounding boxes
+    - close_pairs (list): List of tuples in the format (bbox1, bbox2, bbox1_id, bbox2_id, distance)
     """
     if len(bboxes) <= 1:
-        return np.array([])
+        return []
     if not isinstance(homography, np.ndarray):
         homography = np.array(homography)
-    if not isinstance(bboxes, np.ndarray):
-        bboxes = np.array(bboxes)
+    bboxes_list, ids = zip(*bboxes)
+    bboxes_list = list(bboxes_list)
+    bboxes_list = np.array(bboxes_list)
     # Calculate bottom middle point of each bounding box in image coordinates
-    width_height = (bboxes[:, 2:4] - bboxes[:, :2]) / 2
-    bboxes_bottom_middle = bboxes[:, :2] + width_height
+    width_height = (bboxes_list[:, 2:4] - bboxes_list[:, :2]) / 2
+    bboxes_bottom_middle = bboxes_list[:, :2] + width_height
     # Convert to homogeneous coordinates
     bboxes_bottom_middle_homog = np.hstack(
-        (bboxes_bottom_middle, np.ones((len(bboxes), 1)))
+        (bboxes_bottom_middle, np.ones((len(bboxes_list), 1)))
     ).T
     # Apply homography transformation
     bboxes_bottom_middle_transformed_homog = np.matmul(
@@ -296,17 +242,25 @@ def find_close_bboxes(bboxes, homography, scale_factor, threshold):
         bboxes_bottom_middle_transformed, bboxes_bottom_middle_transformed
     )
     # Get upper triangle of the distance matrix
-    upper_tri = np.triu_indices(len(bboxes), 1)
+    upper_tri = np.triu_indices(len(bboxes_list), 1)
     # Get indices of pairs of close bounding boxes
     indices = np.argwhere(distance_matrix[upper_tri] < threshold)
     close_pairs = [(upper_tri[0][i], upper_tri[1][i]) for i in indices]
 
+    ids = np.array(ids)
     # Get distances of pairs of close bounding boxes
     distances = distance_matrix[upper_tri][distance_matrix[upper_tri] < threshold]
     if len(close_pairs) == 0 or distances.size == 0:
         return []
     return [
-        (bboxes[i[0]][0], bboxes[i[1]][0], d) for i, d in zip(close_pairs, distances)
+        (
+            bboxes_list[i[0]][0],
+            bboxes_list[i[1]][0],
+            ids[i[0]][0],
+            ids[i[1]][0],
+            d,
+        )
+        for i, d in zip(close_pairs, distances)
     ]
 
 

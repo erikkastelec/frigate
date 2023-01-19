@@ -997,6 +997,7 @@ def recordings(camera_name):
             Recordings.segment_size,
             Recordings.motion,
             Recordings.objects,
+            Recordings.close_contacts,
         )
         .where(
             Recordings.camera == camera_name,

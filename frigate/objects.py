@@ -31,6 +31,9 @@ class ObjectTracker:
         obj["start_time"] = obj["frame_time"]
         obj["motionless_count"] = 0
         obj["position_changes"] = 0
+        # TODO: check if needed
+        obj["close_contacts"] = set()
+
         self.tracked_objects[id] = obj
         self.disappeared[id] = 0
         self.positions[id] = {
