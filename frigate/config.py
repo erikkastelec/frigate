@@ -178,6 +178,12 @@ class CalibrationConfig(FrigateBaseModel):
     )
 
 
+class CloseContactsConfig(FrigateBaseModel):
+    enabled: bool = Field(default=False, title="Enable close contacts detection.")
+    distance_treshold: float = Field(default=2.0, title="Distance threshold in meters.")
+    time_threshold: float = Field(default=5.0, title="Time threshold in seconds.")
+
+
 class RuntimeMotionConfig(MotionConfig):
     raw_mask: Union[str, List[str]] = ""
     mask: np.ndarray = None
@@ -616,6 +622,9 @@ class CameraConfig(FrigateBaseModel):
         default_factory=TimestampStyleConfig, title="Timestamp style configuration."
     )
     calibration: Optional[CalibrationConfig] = Field(title="Calibration configuration.")
+    close_contacts: CloseContactsConfig = Field(
+        default_factory=CloseContactsConfig, title="Close contacts configuration."
+    )
     _ffmpeg_cmds: List[Dict[str, List[str]]] = PrivateAttr()
 
     def __init__(self, **config):
@@ -886,12 +895,15 @@ class FrigateConfig(FrigateBaseModel):
     detect: DetectConfig = Field(
         default_factory=DetectConfig, title="Global object tracking configuration."
     )
+    close_contacts: CloseContactsConfig = Field(
+        default_factory=CloseContactsConfig,
+        title="Global close contacts configuration.",
+    )
     cameras: Dict[str, CameraConfig] = Field(title="Camera configuration.")
     timestamp_style: TimestampStyleConfig = Field(
         default_factory=TimestampStyleConfig,
         title="Global timestamp style configuration.",
     )
-    # calibration: Optional[CalibrationConfig] = Field(title="Calibration configuration.")
 
     @property
     def runtime_config(self) -> FrigateConfig:
