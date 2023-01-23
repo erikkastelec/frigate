@@ -52,6 +52,7 @@ class Dispatcher:
             "motion_threshold": self._on_motion_threshold_command,
             "recordings": self._on_recordings_command,
             "snapshots": self._on_snapshots_command,
+            "close_contacts": self._on_close_contacts_command,
         }
 
     def _receive(self, topic: str, payload: str) -> None:
@@ -195,3 +196,31 @@ class Dispatcher:
                 snapshots_settings.enabled = False
 
         self.publish(f"{camera_name}/snapshots/state", payload, retain=True)
+
+    def _on_close_contacts_command(self, camera_name: str, payload: str) -> None:
+        """Callback for close contacts topic."""
+        close_contacts_settings = self.config.cameras[camera_name].close_contacts
+
+        if payload == "ON":
+            if not close_contacts_settings.enabled:
+                logger.info(f"Turning on close contacts for {camera_name}")
+                close_contacts_settings.enabled = True
+            if not self.camera_metrics[camera_name]["motion_enabled"].value:
+                logger.info(
+                    f"Turning on motion for {camera_name} due to close contacts being enabled."
+                )
+                self.camera_metrics[camera_name]["motion_enabled"].value = True
+                self.publish(f"{camera_name}/motion/state", payload, retain=True)
+            if not self.camera_metrics[camera_name]["detection_enabled"].value:
+                logger.info(
+                    f"Turning on detection for {camera_name} due to close contacts being enabled."
+                )
+                self.camera_metrics[camera_name]["detection_enabled"].value = True
+                self.publish(f"{camera_name}/detect/state", payload, retain=True)
+                self.config.cameras[camera_name].detect.enabled = True
+        elif payload == "OFF":
+            if close_contacts_settings.enabled:
+                logger.info(f"Turning off close contacts for {camera_name}")
+                close_contacts_settings.enabled = False
+
+        self.publish(f"{camera_name}/close_contacts/state", payload, retain=True)

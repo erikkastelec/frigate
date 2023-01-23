@@ -14,7 +14,12 @@ import numpy as np
 import cv2
 from setproctitle import setproctitle
 
-from frigate.config import CameraConfig, DetectConfig, PixelFormatEnum
+from frigate.config import (
+    CameraConfig,
+    DetectConfig,
+    PixelFormatEnum,
+    CloseContactsConfig,
+)
 from frigate.const import CACHE_DIR
 from frigate.object_detection import RemoteObjectDetector
 from frigate.log import LogPipe
@@ -34,6 +39,7 @@ from frigate.util import (
     yuv_region_2_bgr,
     yuv_region_2_yuv,
 )
+from frigate.close_contacts import CloseContactsDetector, CloseContact
 
 logger = logging.getLogger(__name__)
 
@@ -429,6 +435,7 @@ def track_camera(
     frame_queue = process_info["frame_queue"]
     detection_enabled = process_info["detection_enabled"]
     motion_enabled = process_info["motion_enabled"]
+    close_contacts_enabled = process_info["close_contacts_enabled"]
     improve_contrast_enabled = process_info["improve_contrast_enabled"]
     motion_threshold = process_info["motion_threshold"]
     motion_contour_area = process_info["motion_contour_area"]
@@ -452,13 +459,18 @@ def track_camera(
 
     frame_manager = SharedMemoryFrameManager()
 
+    close_contacts_detector = CloseContactsDetector(config)
+
     process_frames(
         name,
         frame_queue,
         frame_shape,
         model_config,
         config.detect,
+        config.close_contacts,
+        config.calibration,
         frame_manager,
+        close_contacts_detector,
         motion_detector,
         object_detector,
         object_tracker,
@@ -556,7 +568,9 @@ def process_frames(
     frame_shape,
     model_config,
     detect_config: DetectConfig,
+    close_contacts_config: CloseContactsConfig,
     frame_manager: FrameManager,
+    close_contacts_detector: CloseContactsDetector,
     motion_detector: MotionDetector,
     object_detector: RemoteObjectDetector,
     object_tracker: ObjectTracker,
@@ -823,6 +837,12 @@ def process_frames(
             # else, just update the frame times for the stationary objects
             else:
                 object_tracker.update_frame_times(frame_time)
+
+            # Depends on object_tracker having already consolidated and matched objects.
+            close_contacts_objects = close_contacts_detector.detect(
+                object_tracker.tracker_objects, frame_time
+            )
+            object_tracker.update_close_contacts(close_contacts_objects)
 
         # add to the queue if not full
         if detected_objects_queue.full():

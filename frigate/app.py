@@ -99,6 +99,17 @@ class FrigateApp:
                 "motion_contour_area": mp.Value(
                     "i", self.config.cameras[camera_name].motion.contour_area
                 ),
+                "close_contacts_enabled": mp.Value(
+                    "i", self.config.cameras[camera_name].close_contacts.enabled
+                ),
+                "close_contacts_distance_threshold": mp.Value(
+                    "i",
+                    self.config.cameras[camera_name].close_contacts.distance_threshold,
+                ),
+                "close_contacts_time_threshold": mp.Value(
+                    "i",
+                    self.config.cameras[camera_name].close_contacts.time_threshold,
+                ),
                 "detection_fps": mp.Value("d", 0.0),
                 "detection_frame": mp.Value("d", 0.0),
                 "read_start": mp.Value("d", 0.0),

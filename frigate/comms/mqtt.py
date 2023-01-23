@@ -52,6 +52,11 @@ class MqttClient(Communicator):  # type: ignore[misc]
                 f"{camera_name}/detect/state",
                 "ON" if camera.detect.enabled else "OFF",
                 retain=True,
+            ),
+            self.publish(
+                f"{camera_name}/close_contacts/state",
+                "ON" if camera.close_contacts.enabled else "OFF",
+                retain=True,
             )
             self.publish(
                 f"{camera_name}/motion/state",
@@ -150,6 +155,10 @@ class MqttClient(Communicator):  # type: ignore[misc]
             )
             self.client.message_callback_add(
                 f"{self.mqtt_config.topic_prefix}/{name}/detect/set",
+                self.on_mqtt_command,
+            )
+            self.client.message_callback_add(
+                f"{self.mqtt_config.topic_prefix}/{name}/close_contacts/set",
                 self.on_mqtt_command,
             )
             self.client.message_callback_add(

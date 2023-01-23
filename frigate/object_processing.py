@@ -89,8 +89,6 @@ class TrackedObject:
         self.frame = None
         self.close_contacts = set()
         self.previous = self.to_dict()
-        # TODO: find a better way (keep who was in close contact?)
-
         # start the score history
         self.score_history = [self.obj_data["score"]]
 
@@ -465,6 +463,8 @@ class CameraState:
                     thickness=thickness,
                     color=color,
                 )
+
+        # TODO: move to appropriate location
         close_bboxes = find_close_bboxes(
             [
                 (obj["box"], obj["id"])

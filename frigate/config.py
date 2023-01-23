@@ -180,7 +180,7 @@ class CalibrationConfig(FrigateBaseModel):
 
 class CloseContactsConfig(FrigateBaseModel):
     enabled: bool = Field(default=False, title="Enable close contacts detection.")
-    distance_treshold: float = Field(default=2.0, title="Distance threshold in meters.")
+    distance_threshold: float = Field(default=2.0, title="Distance threshold in meters.")
     time_threshold: float = Field(default=5.0, title="Time threshold in seconds.")
 
 

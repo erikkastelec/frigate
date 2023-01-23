@@ -12,8 +12,10 @@ import cv2
 import numpy as np
 from scipy.spatial import distance as dist
 
-from frigate.config import DetectConfig
-from frigate.util import intersection_over_union
+from frigate.config import DetectConfig, CalibrationConfig
+from frigate.util import intersection_over_union, find_close_bboxes
+from frigate.close_contacts import CloseContact
+from typing import Dict, List, Tuple
 
 
 class ObjectTracker:
@@ -32,8 +34,7 @@ class ObjectTracker:
         obj["motionless_count"] = 0
         obj["position_changes"] = 0
         # TODO: check if needed
-        obj["close_contacts"] = set()
-
+        obj["close_contacts"] = {}
         self.tracked_objects[id] = obj
         self.disappeared[id] = 0
         self.positions[id] = {
@@ -95,6 +96,24 @@ class ObjectTracker:
             position["ymax"] = np.percentile(position["ymaxs"], 85)
 
         return True
+
+    def update_close_contacts(
+        self, close_objects: List(Tuple([int, int, int, int], string))
+    ):
+        if close_objects:
+            for _, _, id1, id2, _ in close_objects:
+                try:
+                    self.tracked_objects[id1].close_contacts["id2"].frame_count += 1
+                except KeyError:
+                    self.tracked_objects[id1].close_contacts["id2"] = CloseContact(
+                        id1, id2
+                    )
+                try:
+                    self.tracked_objects[id2].close_contacts["id1"].frame_count += 1
+                except KeyError:
+                    self.tracked_objects[id2].close_contacts["id1"] = CloseContact(
+                        id2, id1
+                    )
 
     def is_expired(self, id):
         obj = self.tracked_objects[id]
