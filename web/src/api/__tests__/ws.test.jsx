@@ -113,8 +113,8 @@ describe('WsProvider', () => {
     vi.spyOn(Date, 'now').mockReturnValue(123456);
     const config = {
       cameras: {
-        front: { name: 'front', detect: { enabled: true }, record: { enabled: false }, snapshots: { enabled: true } },
-        side: { name: 'side', detect: { enabled: false }, record: { enabled: false }, snapshots: { enabled: false } },
+        front: { name: 'front', detect: { enabled: true }, record: { enabled: false }, snapshots: { enabled: true }, close_contacts: {enabled: true} },
+        side: { name: 'side', detect: { enabled: false }, record: { enabled: false }, snapshots: { enabled: false }, close_contacts: {enabled: true} },
       },
     };
     render(
@@ -132,6 +132,9 @@ describe('WsProvider', () => {
     expect(screen.getByTestId('front/snapshots/state')).toHaveTextContent(
       '{"lastUpdate":123456,"payload":"ON","retain":false}'
     );
+    expect(screen.getByTestId('front/close_contacts/state')).toHaveTextContent(
+      '{"lastUpdate":123456,"payload":"ON","retain":false}'
+    );
     expect(screen.getByTestId('side/detect/state')).toHaveTextContent(
       '{"lastUpdate":123456,"payload":"OFF","retain":false}'
     );
@@ -140,6 +143,9 @@ describe('WsProvider', () => {
     );
     expect(screen.getByTestId('side/snapshots/state')).toHaveTextContent(
       '{"lastUpdate":123456,"payload":"OFF","retain":false}'
+    );
+    expect(screen.getByTestId('side/close_contacts/state')).toHaveTextContent(
+      '{"lastUpdate":123456,"payload":"ON","retain":false}'
     );
   });
 });

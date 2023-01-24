@@ -100,6 +100,13 @@ export default function Camera({ camera }) {
         label="Regions"
         labelPosition="after"
       />
+      <Switch
+        checked={options['close_contacts']}
+        id="close_contacts"
+        onChange={handleSetOption}
+        label="Contacts"
+        labelPosition="after"
+      />
       <Link href={`/cameras/${camera}/editor`}>Mask & Zone creator</Link>
     </div>
   ) : null;

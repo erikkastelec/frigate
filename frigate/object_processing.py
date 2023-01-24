@@ -87,7 +87,7 @@ class TrackedObject:
         self.last_updated = 0
         self.last_published = 0
         self.frame = None
-        self.close_contacts = set()
+        self.close_contacts = {}
         self.previous = self.to_dict()
         # start the score history
         self.score_history = [self.obj_data["score"]]
@@ -452,6 +452,19 @@ class CameraState:
                     (0, 0, 255),
                     2,
                 )
+        if draw_options.get("close_contacts"):
+            objects = tracked_objects.values()
+            for obj in objects:
+                if obj["frame_time"] == frame_time:
+                    for contact in obj["close_contacts"].values():
+                        if contact.last_frame_time == frame_time:
+                            draw_line_between_bounding_boxes(
+                                frame_copy,
+                                tracked_objects[contact.id1]["box"],
+                                tracked_objects[contact.id2]["box"],
+                                contact.last_distance,
+                                self.camera_config.close_contacts.distance_threshold,
+                            )
 
         if draw_options.get("timestamp"):
             color = self.camera_config.timestamp_style.color

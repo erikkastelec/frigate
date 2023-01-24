@@ -5,7 +5,7 @@ import CameraImage from '../components/CameraImage';
 import ClipIcon from '../icons/Clip';
 import MotionIcon from '../icons/Motion';
 import SnapshotIcon from '../icons/Snapshot';
-import { useDetectState, useRecordingsState, useSnapshotsState } from '../api/ws';
+import { useDetectState, useRecordingsState, useSnapshotsState, useCloseContactsState } from '../api/ws';
 import { useMemo } from 'preact/hooks';
 import useSWR from 'swr';
 
@@ -43,6 +43,7 @@ function Camera({ name }) {
   const { payload: detectValue, send: sendDetect } = useDetectState(name);
   const { payload: recordValue, send: sendRecordings } = useRecordingsState(name);
   const { payload: snapshotValue, send: sendSnapshots } = useSnapshotsState(name);
+  const { payload: closeContactsValue, send: sendCloseContacts } = useCloseContactsState(name);
   const href = `/cameras/${name}`;
   const buttons = useMemo(() => {
     return [
@@ -80,8 +81,17 @@ function Camera({ name }) {
           sendSnapshots(snapshotValue === 'ON' ? 'OFF' : 'ON', true);
         },
       },
+      //TODO: add close contacts icon
+      {
+        name: `Toggle close contacts ${closeContactsValue === 'ON' ? 'off' : 'on'}`,
+        icon: SnapshotIcon,
+        color: closeContactsValue === 'ON' ? 'blue' : 'gray',
+        onClick: () => {
+          sendCloseContacts(closeContactsValue === 'ON' ? 'OFF' : 'ON', true);
+        },
+      },
     ],
-    [detectValue, sendDetect, recordValue, sendRecordings, snapshotValue, sendSnapshots]
+    [detectValue, sendDetect, recordValue, sendRecordings, snapshotValue, sendSnapshots, closeContactsValue, sendCloseContacts]
   );
 
   return (

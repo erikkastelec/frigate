@@ -839,7 +839,7 @@ def process_frames(
             close_contacts_objects = close_contacts_detector.detect(
                 object_tracker.tracked_objects, frame_time
             )
-            object_tracker.update_close_contacts(close_contacts_objects)
+            object_tracker.update_close_contacts(close_contacts_objects, frame_time)
 
         # add to the queue if not full
         if detected_objects_queue.full():

@@ -49,6 +49,9 @@ class ObjectTracker:
         }
 
     def deregister(self, id):
+        # Delete close contacts
+        for contact in self.tracked_objects[id]["close_contacts"].values():
+            del self.tracked_objects[contact.id2]["close_contacts"][contact.id1]
         del self.tracked_objects[id]
         del self.disappeared[id]
 
@@ -98,21 +101,39 @@ class ObjectTracker:
         return True
 
     def update_close_contacts(
-        self, close_objects: list(tuple(([int, int, int, int], string)))
+        self,
+        close_objects: list(
+            tuple(([int, int, int, int], [int, int, int, int], string, string, float))
+        ),
+        frame_time: datetime.datetime,
     ):
         if close_objects:
-            for _, _, id1, id2, _ in close_objects:
+            for _, _, id1, id2, distance in close_objects:
+                # TODO: clean up, could probably use an update method for CloseContact
                 try:
-                    self.tracked_objects[id1]["close_contacts"]["id2"].frame_count += 1
+                    self.tracked_objects[id1]["close_contacts"][id2].frame_count += 1
+                    self.tracked_objects[id1]["close_contacts"][
+                        id2
+                    ].last_distance = distance
+                    self.tracked_objects[id1]["close_contacts"][
+                        id2
+                    ].last_distance = distance
                 except KeyError:
-                    self.tracked_objects[id1]["close_contacts"]["id2"] = CloseContact(
-                        id1, id2
+                    self.tracked_objects[id1]["close_contacts"][id2] = CloseContact(
+                        id1, id2, distance, frame_time
                     )
+
                 try:
-                    self.tracked_objects[id2]["close_contacts"]["id1"].frame_count += 1
+                    self.tracked_objects[id2]["close_contacts"][id1].frame_count += 1
+                    self.tracked_objects[id2]["close_contacts"][
+                        id1
+                    ].last_distance = distance
+                    self.tracked_objects[id2]["close_contacts"][
+                        id1
+                    ].last_frame_time = frame_time
                 except KeyError:
-                    self.tracked_objects[id2]["close_contacts"]["id1"] = CloseContact(
-                        id2, id1
+                    self.tracked_objects[id2]["close_contacts"][id1] = CloseContact(
+                        id2, id1, distance, frame_time
                     )
 
     def is_expired(self, id):

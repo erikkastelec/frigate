@@ -27,6 +27,7 @@ describe('Camera Route', () => {
       mask: false,
       motion: true,
       regions: false,
+      close_contact: true,
     });
 
     render(<Camera camera="front" />);

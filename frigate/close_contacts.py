@@ -3,10 +3,16 @@ from frigate.util import find_close_bboxes
 
 
 class CloseContact:
-    def __init__(self, id1, id2):
+    def __init__(self, id1, id2, last_distance, last_frame_time):
         self.id1 = id1
         self.id2 = id2
+        self.last_distance = last_distance
         self.frame_count = 0
+        self.last_frame_time = last_frame_time
+
+    # So we can delete close contacts if object with self.id2 stops being tracked
+    def __hash__(self):
+        return hash(self.id2)
 
     def __eq__(self, other):
         return (self.id1 == other.id1 and self.id2 == other.id2) or (

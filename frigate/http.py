@@ -800,6 +800,7 @@ def mjpeg_feed(camera_name):
         "mask": request.args.get("mask", type=int),
         "motion_boxes": request.args.get("motion", type=int),
         "regions": request.args.get("regions", type=int),
+        "close_contacts": request.args.get("close_contacts", type=int),
     }
     if camera_name in current_app.frigate_config.cameras:
         # return a multipart response
@@ -826,6 +827,7 @@ def latest_frame(camera_name):
         "mask": request.args.get("mask", type=int),
         "motion_boxes": request.args.get("motion", type=int),
         "regions": request.args.get("regions", type=int),
+        "close_contacts": request.args.get("close_contacts", type=int),
     }
     resize_quality = request.args.get("quality", default=70, type=int)
 
@@ -908,6 +910,7 @@ def get_recordings_storage_usage():
     return jsonify(camera_usages)
 
 
+# TODO: add support for close contacts
 # return hourly summary for recordings of camera
 @bp.route("/<camera_name>/recordings/summary")
 def recordings_summary(camera_name):
