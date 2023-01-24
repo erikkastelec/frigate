@@ -467,8 +467,6 @@ def track_camera(
         frame_shape,
         model_config,
         config.detect,
-        config.close_contacts,
-        config.calibration,
         frame_manager,
         close_contacts_detector,
         motion_detector,
@@ -568,7 +566,6 @@ def process_frames(
     frame_shape,
     model_config,
     detect_config: DetectConfig,
-    close_contacts_config: CloseContactsConfig,
     frame_manager: FrameManager,
     close_contacts_detector: CloseContactsDetector,
     motion_detector: MotionDetector,
@@ -840,7 +837,7 @@ def process_frames(
 
             # Depends on object_tracker having already consolidated and matched objects.
             close_contacts_objects = close_contacts_detector.detect(
-                object_tracker.tracker_objects, frame_time
+                object_tracker.tracked_objects, frame_time
             )
             object_tracker.update_close_contacts(close_contacts_objects)
 

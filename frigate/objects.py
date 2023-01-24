@@ -98,20 +98,20 @@ class ObjectTracker:
         return True
 
     def update_close_contacts(
-        self, close_objects: List(Tuple([int, int, int, int], string))
+        self, close_objects: list(tuple(([int, int, int, int], string)))
     ):
         if close_objects:
             for _, _, id1, id2, _ in close_objects:
                 try:
-                    self.tracked_objects[id1].close_contacts["id2"].frame_count += 1
+                    self.tracked_objects[id1]["close_contacts"]["id2"].frame_count += 1
                 except KeyError:
-                    self.tracked_objects[id1].close_contacts["id2"] = CloseContact(
+                    self.tracked_objects[id1]["close_contacts"]["id2"] = CloseContact(
                         id1, id2
                     )
                 try:
-                    self.tracked_objects[id2].close_contacts["id1"].frame_count += 1
+                    self.tracked_objects[id2]["close_contacts"]["id1"].frame_count += 1
                 except KeyError:
-                    self.tracked_objects[id2].close_contacts["id1"] = CloseContact(
+                    self.tracked_objects[id2]["close_contacts"]["id1"] = CloseContact(
                         id2, id1
                     )
 

@@ -103,11 +103,11 @@ class FrigateApp:
                     "i", self.config.cameras[camera_name].close_contacts.enabled
                 ),
                 "close_contacts_distance_threshold": mp.Value(
-                    "i",
+                    "d",
                     self.config.cameras[camera_name].close_contacts.distance_threshold,
                 ),
                 "close_contacts_time_threshold": mp.Value(
-                    "i",
+                    "d",
                     self.config.cameras[camera_name].close_contacts.time_threshold,
                 ),
                 "detection_fps": mp.Value("d", 0.0),

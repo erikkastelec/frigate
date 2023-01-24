@@ -1,7 +1,4 @@
-import cv2
-import imutils
-import numpy as np
-from frigate.config import CloseContactsConfig, CameraConfig
+from frigate.config import CameraConfig
 from frigate.util import find_close_bboxes
 
 

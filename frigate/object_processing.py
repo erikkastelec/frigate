@@ -404,52 +404,6 @@ class CameraState:
                     thickness = 1
                     color = (255, 0, 0)
 
-                # for other_obj in tracked_objects.values():
-                #     if (
-                #         obj == other_obj
-                #         or obj["frame_time"] != frame_time
-                #         or other_obj["frame_time"] != frame_time
-                #         or obj["label"] != other_obj["label"]
-                #     ):
-                #         continue
-                #     distance_between_bboxes = calculate_distance_between_bounding_boxes(
-                #         obj["box"],
-                #         other_obj["box"],
-                #         self.camera_config.calibration.homography_matrix,
-                #         self.camera_config.calibration.scale_factor,
-                #     )
-
-                #     draw_line_between_bounding_boxes(
-                #         frame_copy,
-                #         obj["box"],
-                #         other_obj["box"],
-                #         distance_between_bboxes,
-                #     )
-                #     if distance_between_bboxes < 2:
-                #         close_contact = True
-                # frame_copy = draw_bounding_boxes_on_birds_eye_view(
-                #     frame_copy,
-                #     [
-                #         obj["box"]
-                #         for obj in tracked_objects.values()
-                #         if obj["frame_time"] == frame_time
-                #     ],
-                #     1,
-                #     self.camera_config.calibration.homography_matrix,
-                #     self.camera_config.calibration.scale_factor,
-                # )
-                # circle_color = (0, 255, 0)
-                # if close_contact:
-                #     circle_color = (0, 0, 255)
-                # draw_circle_around_bounding_box(
-                #     frame_copy,
-                #     obj["box"],
-                #     2,
-                #     circle_color,
-                #     self.camera_config.calibration.homography_matrix,
-                #     self.camera_config.calibration.scale_factor,
-                # )
-
                 # draw the bounding boxes on the frame
                 box = obj["box"]
                 draw_box_with_label(
@@ -463,30 +417,6 @@ class CameraState:
                     thickness=thickness,
                     color=color,
                 )
-
-        # TODO: move to appropriate location
-        close_bboxes = find_close_bboxes(
-            [
-                (obj["box"], obj["id"])
-                for obj in tracked_objects.values()
-                if obj["frame_time"] == frame_time
-            ],
-            self.camera_config.calibration.homography_matrix,
-            self.camera_config.calibration.scale_factor,
-            2.0,
-        )
-        # Use draw_line_between_bounding_boxes to draw lines between close bboxes if there are any
-        if close_bboxes:
-            for bbox1, bbox2, id1, id2, distance in close_bboxes:
-                draw_line_between_bounding_boxes(
-                    frame_copy,
-                    bbox1,
-                    bbox2,
-                    distance,
-                    2,
-                )
-                self.tracked_objects[id1].close_contacts.add(id2)
-                self.tracked_objects[id2].close_contacts.add(id1)
 
         if draw_options.get("regions"):
             for region in regions:
@@ -754,7 +684,8 @@ class TrackedObjectProcessor(threading.Thread):
 
             self.dispatcher.publish(
                 "events",
-                json.dumps(message, default=serialize_sets),
+                # json.dumps(message, default=serialize_sets),
+                json.dumps(message, default=lambda o: o.__dict__),
                 retain=False,
             )
             obj.previous = after
@@ -810,7 +741,9 @@ class TrackedObjectProcessor(threading.Thread):
                     "type": "end",
                 }
                 self.dispatcher.publish(
-                    "events", json.dumps(message, default=serialize_sets), retain=False
+                    "events",
+                    json.dumps(message, default=lambda o: o.__dict__),
+                    retain=False,
                 )
 
             self.event_queue.put(("end", camera, obj.to_dict(include_thumbnail=True)))
