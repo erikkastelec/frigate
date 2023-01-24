@@ -5,6 +5,7 @@ import CameraImage from '../components/CameraImage';
 import ClipIcon from '../icons/Clip';
 import MotionIcon from '../icons/Motion';
 import SnapshotIcon from '../icons/Snapshot';
+import SocialDistanceIcon from '../icons/SocialDistance';
 import { useDetectState, useRecordingsState, useSnapshotsState, useCloseContactsState } from '../api/ws';
 import { useMemo } from 'preact/hooks';
 import useSWR from 'swr';
@@ -84,7 +85,7 @@ function Camera({ name }) {
       //TODO: add close contacts icon
       {
         name: `Toggle close contacts ${closeContactsValue === 'ON' ? 'off' : 'on'}`,
-        icon: SnapshotIcon,
+        icon: SocialDistanceIcon,
         color: closeContactsValue === 'ON' ? 'blue' : 'gray',
         onClick: () => {
           sendCloseContacts(closeContactsValue === 'ON' ? 'OFF' : 'ON', true);
