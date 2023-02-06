@@ -61,7 +61,8 @@ class EventProcessor(threading.Thread):
 
     def run(self) -> None:
         # set an end_time on events without an end_time on startup
-        Event.update(end_time=Event.start_time + 30).where(
+        # TODO: Change back to 30
+        Event.update(end_time=Event.start_time + 5).where(
             Event.end_time == None
         ).execute()
 
@@ -306,7 +307,10 @@ class EventCleanup(threading.Thread):
         while not self.stop_event.wait(30):
             self.expire("clips")
             self.expire("snapshots")
-            self.purge_duplicates()
+            # TODO: Needs fixing?
+            # Keep separate events for people so for re-id demo
+            if not self.config.record.events.keep_duplicate_events:
+                self.purge_duplicates()
 
             # drop events from db where has_clip and has_snapshot are false
             delete_query = Event.delete().where(

@@ -123,6 +123,7 @@ class EventsConfig(FrigateBaseModel):
     retain: RetainConfig = Field(
         default_factory=RetainConfig, title="Event retention settings."
     )
+    keep_duplicate_events: bool = Field(default=False, title="Keep overlapping events.")
 
 
 class RecordRetainConfig(FrigateBaseModel):

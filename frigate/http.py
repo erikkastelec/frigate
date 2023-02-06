@@ -331,6 +331,17 @@ def delete_event(id):
     )
 
 
+# TODO: for dev
+@bp.route("/events/delete_all")
+def delete_all_events():
+    event_ids = Event.select(Event.id)
+    for id in event_ids:
+        delete_event(id.id)
+    return make_response(
+        jsonify({"success": True, "message": "Deleted all events"}), 200
+    )
+
+
 @bp.route("/events/<id>/thumbnail.jpg")
 def event_thumbnail(id, max_cache_age=2592000):
     format = request.args.get("format", "ios")
@@ -1039,11 +1050,10 @@ def recording_clip(camera_name, start_ts, end_ts):
         # if this is the ending clip, add an outpoint
         if clip.end_time > end_ts:
             playlist_lines.append(f"outpoint {int(end_ts - clip.start_time)}")
-
     file_name = f"clip_{camera_name}_{start_ts}-{end_ts}.mp4"
     path = f"/tmp/cache/{file_name}"
-
     if not os.path.exists(path):
+        # TODO: Consider adding transcoding
         ffmpeg_cmd = [
             "ffmpeg",
             "-y",
