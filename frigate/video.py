@@ -455,8 +455,9 @@ def track_camera(
         name, labelmap, detection_queue, result_connection, model_config
     )
 
-    # object_tracker = ObjectTracker(config.detect)
-    object_tracker = SortObjectTracker(config.detect)
+    object_tracker = ObjectTracker(config.detect)
+    if config.detect.tracker == "sort":
+        object_tracker = SortObjectTracker(config.detect)
 
     frame_manager = SharedMemoryFrameManager()
 

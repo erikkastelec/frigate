@@ -19,7 +19,7 @@ from frigate.config import FrigateConfig
 from frigate.object_detection import LocalObjectDetector
 from frigate.motion import MotionDetector
 from frigate.object_processing import CameraState
-from frigate.objects import ObjectTracker
+from frigate.objects import ObjectTracker, SortObjectTracker
 from frigate.util import (
     EventsPerSecond,
     SharedMemoryFrameManager,
@@ -106,8 +106,11 @@ class ProcessClip:
         mask[:] = 255
         motion_detector = MotionDetector(self.frame_shape, self.camera_config.motion)
         motion_detector.save_images = False
-
         object_tracker = ObjectTracker(self.camera_config.detect)
+
+        if self.camera_config.detect.tracker == "sort":
+            object_tracker = SortObjectTracker(self.camera_config.detect)
+
         process_info = {
             "process_fps": mp.Value("d", 0.0),
             "detection_fps": mp.Value("d", 0.0),

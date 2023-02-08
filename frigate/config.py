@@ -255,6 +255,9 @@ class DetectConfig(FrigateBaseModel):
         default_factory=StationaryConfig,
         title="Stationary objects config.",
     )
+    tracker: str = Field(
+        default="original", title="Tracker to use for detection tracking."
+    )
 
 
 class FilterConfig(FrigateBaseModel):
