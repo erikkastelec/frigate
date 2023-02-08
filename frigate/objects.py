@@ -12,8 +12,8 @@ import cv2
 import numpy as np
 from scipy.spatial import distance as dist
 
-from frigate.config import DetectConfig, CalibrationConfig
-from frigate.util import intersection_over_union
+from frigate.config import DetectConfig
+from frigate.util import intersection_over_union, generate_random_color
 from frigate.close_contacts import CloseContact
 from typing import Dict, List, Tuple
 
@@ -40,6 +40,7 @@ class ObjectTracker:
         obj["position_changes"] = 0
         # TODO: check if needed
         obj["close_contacts"] = {}
+        obj["color"] = generate_random_color()
         self.tracked_objects[id] = obj
         self.disappeared[id] = 0
         self.positions[id] = {
@@ -111,39 +112,67 @@ class ObjectTracker:
 
     def update_close_contacts(
         self,
-        close_objects: list(
-            tuple(([int, int, int, int], [int, int, int, int], string, string, float))
-        ),
+        close_objects: list(tuple((string, string, float))),
+        non_close_objects: list(tuple((string, string, float))),
         frame_time: datetime.datetime,
     ):
         if close_objects:
-            for _, _, id1, id2, distance in close_objects:
+            for id1, id2, distance in close_objects:
                 # TODO: clean up, could probably use an update method for CloseContact
+
+                # Update last distance if detected in close objects and frame time if rediscovered contact
+
                 try:
-                    self.tracked_objects[id1]["close_contacts"][id2].frame_count += 1
-                    self.tracked_objects[id1]["close_contacts"][
-                        id2
-                    ].last_distance = distance
-                    self.tracked_objects[id1]["close_contacts"][
-                        id2
-                    ].last_distance = distance
+                    cc = self.tracked_objects[id1]["close_contacts"][id2]
+                    cc.last_distance = distance
+                    cc.last_frame_time = frame_time
+                    # Do not update if not None so we can track the time from start of the contact
+                    if not cc.frame_time:
+                        cc.frame_time = frame_time
                 except KeyError:
                     self.tracked_objects[id1]["close_contacts"][id2] = CloseContact(
                         id1, id2, distance, frame_time
                     )
 
                 try:
-                    self.tracked_objects[id2]["close_contacts"][id1].frame_count += 1
-                    self.tracked_objects[id2]["close_contacts"][
-                        id1
-                    ].last_distance = distance
-                    self.tracked_objects[id2]["close_contacts"][
-                        id1
-                    ].last_frame_time = frame_time
+                    cc = self.tracked_objects[id2]["close_contacts"][id1]
+                    cc.last_distance = distance
+                    cc.last_frame_time = frame_time
+                    if not cc.frame_time:
+                        cc.frame_time = frame_time
                 except KeyError:
                     self.tracked_objects[id2]["close_contacts"][id1] = CloseContact(
                         id2, id1, distance, frame_time
                     )
+
+        if non_close_objects:
+            for id1, id2, distance in non_close_objects:
+                try:
+                    # Calculate the time from last close contact to non contact now
+                    cc = self.tracked_objects[id1]["close_contacts"][id2]
+                    if cc.frame_time:
+                        time_from_last_contact = frame_time - cc.frame_time
+                        if cc.contact_time:
+                            cc.contact_time += time_from_last_contact
+                        else:
+                            cc.contact_time = time_from_last_contact
+
+                    # Reset the frame time to None so we know it is not in close contact
+                    cc.frame_time = None
+                except KeyError:
+                    continue
+
+                try:
+                    cc = self.tracked_objects[id2]["close_contacts"][id1]
+                    if cc.frame_time:
+                        time_from_last_contact = frame_time - cc.frame_time
+                        if cc.contact_time:
+                            cc.contact_time += time_from_last_contact
+                        else:
+                            cc.contact_time = time_from_last_contact
+                    cc.frame_time = None
+                except KeyError:
+                    continue
 
     def is_expired(self, id):
         obj = self.tracked_objects[id]

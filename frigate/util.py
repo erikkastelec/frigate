@@ -20,7 +20,7 @@ import cv2
 import numpy as np
 import os
 import psutil
-
+import random
 from scipy.spatial.distance import cdist
 
 from frigate.const import REGEX_HTTP_CAMERA_USER_PASS, REGEX_RTSP_CAMERA_USER_PASS
@@ -200,6 +200,10 @@ def draw_circle_around_bounding_box(img, bbox, diameter, color, H, scale_factor)
     return img
 
 
+def generate_random_color():
+    return (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+
+
 def find_close_bboxes(bboxes, homography, scale_factor, threshold):
     """
     Finds all pairs of bounding boxes whose bottom middle points are closer than a threshold distance in meters.
@@ -212,10 +216,10 @@ def find_close_bboxes(bboxes, homography, scale_factor, threshold):
     - threshold (float): Maximum allowed distance between bottom middle points of bounding boxes in meters
 
     Returns:
-    - close_pairs (list): List of tuples in the format (bbox1, bbox2, bbox1_id, bbox2_id, distance)
+    - close_pairs (list): List of tuples in the format (bbox1_id, bbox2_id, distance)
     """
     if len(bboxes) <= 1:
-        return []
+        return ([], [])
     if not isinstance(homography, np.ndarray):
         homography = np.array(homography)
     bboxes_list, ids = zip(*bboxes)
@@ -243,25 +247,45 @@ def find_close_bboxes(bboxes, homography, scale_factor, threshold):
     )
     # Get upper triangle of the distance matrix
     upper_tri = np.triu_indices(len(bboxes_list), 1)
+
+    # TODO: cleanup
+
     # Get indices of pairs of close bounding boxes
     indices = np.argwhere(distance_matrix[upper_tri] < threshold)
     close_pairs = [(upper_tri[0][i], upper_tri[1][i]) for i in indices]
-
+    # Get indices of pairs of non close bounding boxes
+    non_close_pairs_indices = np.argwhere(distance_matrix[upper_tri] >= threshold)
+    non_close_pairs = [
+        (upper_tri[0][i], upper_tri[1][i]) for i in non_close_pairs_indices
+    ]
     ids = np.array(ids)
     # Get distances of pairs of close bounding boxes
     distances = distance_matrix[upper_tri][distance_matrix[upper_tri] < threshold]
+    distances2 = distance_matrix[upper_tri][distance_matrix[upper_tri] >= threshold]
     if len(close_pairs) == 0 or distances.size == 0:
-        return []
-    return [
-        (
-            bboxes_list[i[0]][0],
-            bboxes_list[i[1]][0],
-            ids[i[0]][0],
-            ids[i[1]][0],
-            d,
-        )
-        for i, d in zip(close_pairs, distances)
-    ]
+        return ([], [])
+    return (
+        [
+            (
+                # bboxes_list[i[0]][0],
+                # bboxes_list[i[1]][0],
+                ids[i[0]][0],
+                ids[i[1]][0],
+                d,
+            )
+            for i, d in zip(close_pairs, distances)
+        ],
+        [
+            (
+                # bboxes_list[i[0]][0],
+                # bboxes_list[i[1]][0],
+                ids[i[0]][0],
+                ids[i[1]][0],
+                d,
+            )
+            for i, d in zip(non_close_pairs, distances2)
+        ],
+    )
 
 
 def draw_bounding_boxes_on_birds_eye_view(img, bboxes, diameter, H, scale_factor):

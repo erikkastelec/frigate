@@ -26,11 +26,8 @@ from frigate.util import (
     calculate_region,
     draw_box_with_label,
     draw_timestamp,
-    calculate_distance_between_bounding_boxes,
     draw_line_between_bounding_boxes,
-    draw_circle_around_bounding_box,
-    draw_bounding_boxes_on_birds_eye_view,
-    find_close_bboxes,
+    generate_random_color,
 )
 
 logger = logging.getLogger(__name__)
@@ -88,7 +85,10 @@ class TrackedObject:
         self.last_published = 0
         self.frame = None
         self.close_contacts = {}
+        # TODO: remove. Just for debug so every tracked object has a different color.
+        self.color = generate_random_color()
         self.previous = self.to_dict()
+
         # start the score history
         self.score_history = [self.obj_data["score"]]
 
@@ -207,6 +207,7 @@ class TrackedObject:
             "motionless_count": self.obj_data["motionless_count"],
             "position_changes": self.obj_data["position_changes"],
             "close_contacts": self.obj_data["close_contacts"],
+            "color": self.obj_data["color"],
             "current_zones": self.current_zones.copy(),
             "entered_zones": self.entered_zones.copy(),
             "has_clip": self.has_clip,
@@ -397,9 +398,12 @@ class CameraState:
         if draw_options.get("bounding_boxes"):
             # draw the bounding boxes on the frame
             for obj in tracked_objects.values():
+
                 if obj["frame_time"] == frame_time:
-                    thickness = 2
-                    color = self.config.model.colormap[obj["label"]]
+                    thickness = 3
+                    # TODO: Change back
+                    # color = self.config.model.colormap[obj["label"]]
+                    color = obj["color"]
                 else:
                     thickness = 1
                     color = (255, 0, 0)
