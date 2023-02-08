@@ -24,7 +24,7 @@ from frigate.const import CACHE_DIR
 from frigate.object_detection import RemoteObjectDetector
 from frigate.log import LogPipe
 from frigate.motion import MotionDetector
-from frigate.objects import ObjectTracker
+from frigate.objects import ObjectTracker, SortObjectTracker
 from frigate.util import (
     EventsPerSecond,
     FrameManager,
@@ -455,7 +455,8 @@ def track_camera(
         name, labelmap, detection_queue, result_connection, model_config
     )
 
-    object_tracker = ObjectTracker(config.detect)
+    # object_tracker = ObjectTracker(config.detect)
+    object_tracker = SortObjectTracker(config.detect)
 
     frame_manager = SharedMemoryFrameManager()
 
@@ -570,7 +571,8 @@ def process_frames(
     close_contacts_detector: CloseContactsDetector,
     motion_detector: MotionDetector,
     object_detector: RemoteObjectDetector,
-    object_tracker: ObjectTracker,
+    # object_tracker: ObjectTracker,
+    object_tracker: SortObjectTracker,
     detected_objects_queue: mp.Queue,
     process_info: dict,
     objects_to_track: list[str],
@@ -705,19 +707,20 @@ def process_frames(
                 for obj in object_tracker.tracked_objects.values()
                 if obj["id"] in stationary_object_ids
             ]
+            og_det = []
 
             for region in regions:
-                detections.extend(
-                    detect(
-                        detect_config,
-                        object_detector,
-                        frame,
-                        model_config,
-                        region,
-                        objects_to_track,
-                        object_filters,
-                    )
+                reg_det = detect(
+                    detect_config,
+                    object_detector,
+                    frame,
+                    model_config,
+                    region,
+                    objects_to_track,
+                    object_filters,
                 )
+                detections.extend(reg_det)
+                og_det.extend(reg_det)
 
             #########
             # merge objects, check for clipped objects and look again up to 4 times
@@ -788,7 +791,7 @@ def process_frames(
 
                 if refining:
                     refine_count += 1
-
+            non_consolidated_detections = detections
             ## drop detections that overlap too much
             consolidated_detections = []
 
@@ -834,6 +837,7 @@ def process_frames(
             # else, just update the frame times for the stationary objects
             else:
                 object_tracker.update_frame_times(frame_time)
+                # object_tracker.update()
 
             # Depends on object_tracker having already consolidated and matched objects.
             close_contacts_objects = close_contacts_detector.detect(

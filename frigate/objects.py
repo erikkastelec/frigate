@@ -13,9 +13,14 @@ import numpy as np
 from scipy.spatial import distance as dist
 
 from frigate.config import DetectConfig, CalibrationConfig
-from frigate.util import intersection_over_union, find_close_bboxes
+from frigate.util import intersection_over_union
 from frigate.close_contacts import CloseContact
 from typing import Dict, List, Tuple
+
+from frigate.sort_tracker import *
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ObjectTracker:
@@ -50,10 +55,14 @@ class ObjectTracker:
 
     def deregister(self, id):
         # Delete close contacts
-        for contact in self.tracked_objects[id]["close_contacts"].values():
-            del self.tracked_objects[contact.id2]["close_contacts"][contact.id1]
-        del self.tracked_objects[id]
-        del self.disappeared[id]
+        try:
+            for contact in self.tracked_objects[id]["close_contacts"].values():
+                del self.tracked_objects[contact.id2]["close_contacts"][contact.id1]
+            del self.tracked_objects[id]
+            del self.disappeared[id]
+        except KeyError as e:
+            logger.error(f"Unable to delete tracked object {id}")
+            logger.error(e)
 
     # tracks the current position of the object based on the last N bounding boxes
     # returns False if the object has moved outside its previous position
@@ -287,3 +296,147 @@ class ObjectTracker:
             else:
                 for col in unusedCols:
                     self.register(col, group[col])
+
+
+# NEEDS REFACTORING
+
+
+class SortObjectTracker(ObjectTracker):
+    def __init__(self, config: DetectConfig, max_age=50, min_hits=5, iou_threshold=0.5):
+        super().__init__(config)
+        self.max_age = max_age
+        self.min_hits = min_hits
+        self.iou_threshold = iou_threshold
+        self.trackers = []
+        self.frame_count = 0
+        # self.sort_to_object_tracker_map = {}
+
+    def update_tracked_object(self, id, new_obj):
+        self.disappeared[id] = 0
+        # update the motionless count if the object has not moved to a new position
+        if self.update_position(id, new_obj["box"]):
+            self.tracked_objects[id]["motionless_count"] += 1
+            if self.is_expired(id):
+                self.deregister(id)
+                return
+        else:
+            # register the first position change and then only increment if
+            # the object was previously stationary
+            if (
+                self.tracked_objects[id]["position_changes"] == 0
+                or self.tracked_objects[id]["motionless_count"]
+                >= self.detect_config.stationary.threshold
+            ):
+                self.tracked_objects[id]["position_changes"] += 1
+            self.tracked_objects[id]["motionless_count"] = 0
+
+        self.tracked_objects[id].update(new_obj)
+
+    def update(self, frame_time, new_objects):
+
+        """
+        Params:
+          dets - a numpy array of detections in the format [[x1,y1,x2,y2,score],[x1,y1,x2,y2,score],...]
+        Requires: this method must be called once for each frame even with empty detections (use np.empty((0, 5)) for frames without detections).
+        Returns the a similar array, where the last column is the object ID.
+
+        NOTE: The number of objects returned may differ from the number of detections provided.
+        """
+        detections = [
+            [obj[2][0], obj[2][1], obj[2][2], obj[2][3], obj[1]] for obj in new_objects
+        ]
+        dets = np.array(detections)
+        if len(detections) == 0:
+            dets = np.empty((0, 5))
+
+        new_objects = [
+            {
+                "label": obj[0],
+                "score": obj[1],
+                "box": obj[2],
+                "area": obj[3],
+                "ratio": obj[4],
+                "region": obj[5],
+                "frame_time": frame_time,
+                "centroid": (
+                    int((obj[2][0] + obj[2][2]) / 2.0),
+                    int((obj[2][1] + obj[2][3]) / 2.0),
+                ),
+            }
+            for obj in new_objects
+        ]
+        self.frame_count += 1
+        # get predicted locations from existing trackers.
+        trks = np.zeros((len(self.tracked_objects), 5))
+
+        to_del = []
+        ret = []
+        for t, trk in zip(self.tracked_objects.keys(), trks):
+            pos = self.tracked_objects[t]["tracker"].predict()[0]
+            # pos = self.trackers[t].predict()[0]
+            trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
+            if np.any(np.isnan(pos)):
+                self.deregister(t)
+
+        # used to map associate_detection_to_trackers to the correct object
+        tmp_mapper = list(zip(self.tracked_objects.keys(), trks))
+        trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
+        # for t in reversed(to_del):
+        #     self.deregister(self.sort_to_object_tracker_map[t])
+        #     self.trackers.pop(t)
+        #     del self.sort_to_object_tracker_map[t]
+        matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(
+            dets, trks, self.iou_threshold
+        )
+        # update matched trackers with assigned detections
+        for m in matched:
+            self.tracked_objects[tmp_mapper[m[1]][0]]["tracker"].update(dets[m[0], :])
+            self.update_tracked_object(tmp_mapper[m[1]][0], new_objects[m[0]])
+            # self.trackers[m[1]].update(dets[m[0], :])
+            # try:
+            #     self.update_tracked_object(
+            #         self.sort_to_object_tracker_map[m[1]], new_objects[m[0]]
+            #     )
+            # except KeyError:
+            #     print("hello")
+        # create and initialise new trackers for unmatched detections
+        for i in unmatched_dets:
+            # trk = KalmanBoxTracker(dets[i, :])
+            # self.trackers.append(trk)
+            new_objects[i]["tracker"] = KalmanBoxTracker(dets[i, :])
+            self.register(-1, new_objects[i])
+            # self.sort_to_object_tracker_map[len(self.trackers) - 1] = id_to_map
+        # i = len(self.tracked_objects)
+        to_del = []
+        for key in self.tracked_objects.keys():
+            # for trk in reversed(self.trackers):
+            # d = trk.get_state()[0]
+            # if (trk.time_since_update < 1) and (
+            #     trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits
+            # ):
+            #     ret.append(np.concatenate((d, [trk.id + 1])).reshape(1, -1))
+            # i -= 1
+            # remove dead tracklet
+            if self.tracked_objects[key]["tracker"].time_since_update > self.max_age:
+                to_del.append(key)
+                # self.deregister(key)
+                # self.trackers.pop(i)
+                # del self.sort_to_object_tracker_map[i]
+        for key in to_del:
+            self.deregister(key)
+        # if len(ret) > 0:
+        #     return np.concatenate(ret)
+        # return np.empty((0, 5))
+
+    def update_frame_times(self, frame_time):
+        for id in list(self.tracked_objects.keys()):
+            self.tracked_objects[id]["frame_time"] = frame_time
+            self.tracked_objects[id]["motionless_count"] += 1
+            if self.is_expired(id):
+                self.deregister(id)
+        self.update(frame_time, [])
+
+    # To make switching between original tracker and SORT easier
+    def match_and_update(self, frame_time, new_objects):
+        # group by name
+        self.update(frame_time, new_objects)
