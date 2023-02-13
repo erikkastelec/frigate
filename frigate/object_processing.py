@@ -216,6 +216,8 @@ class TrackedObject:
 
         if include_thumbnail:
             event["thumbnail"] = base64.b64encode(self.get_thumbnail()).decode("utf-8")
+            if self.thumbnail_data:
+                event["thumbnail_box"] = self.thumbnail_data["box"]
 
         return event
 

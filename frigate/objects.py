@@ -331,13 +331,14 @@ class ObjectTracker:
 
 
 class SortObjectTracker(ObjectTracker):
-    def __init__(self, config: DetectConfig, max_age=50, min_hits=5, iou_threshold=0.5):
+    def __init__(self, config: DetectConfig, min_hits=5, iou_threshold=0.3):
         super().__init__(config)
-        self.max_age = max_age
+        # TODO: move this to configuration file
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
         self.trackers = []
         self.frame_count = 0
+
         # self.sort_to_object_tracker_map = {}
 
     def update_tracked_object(self, id, new_obj):
@@ -446,7 +447,10 @@ class SortObjectTracker(ObjectTracker):
             #     ret.append(np.concatenate((d, [trk.id + 1])).reshape(1, -1))
             # i -= 1
             # remove dead tracklet
-            if self.tracked_objects[key]["tracker"].time_since_update > self.max_age:
+            if (
+                self.tracked_objects[key]["tracker"].time_since_update
+                > self.max_disappeared
+            ):
                 to_del.append(key)
                 # self.deregister(key)
                 # self.trackers.pop(i)

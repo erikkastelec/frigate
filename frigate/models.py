@@ -22,6 +22,7 @@ class Event(Model):  # type: ignore[misc]
     false_positive = BooleanField()
     zones = JSONField()
     thumbnail = TextField()
+    thumbnail_box = JSONField()
     has_clip = BooleanField(default=True)
     has_snapshot = BooleanField(default=True)
     region = JSONField()
