@@ -30,6 +30,7 @@ class Event(Model):  # type: ignore[misc]
     area = IntegerField()
     retain_indefinitely = BooleanField(default=False)
     ratio = FloatField(default=1.0)
+    close_contacts = JSONField(default=[])
     plus_id = CharField(max_length=30)
 
 

@@ -19,7 +19,10 @@ from frigate.config import (
     SnapshotsConfig,
     RecordConfig,
     FrigateConfig,
+    RetainModeEnum,
 )
+from frigate.close_contacts import CloseContact
+
 from frigate.const import CLIPS_DIR
 from frigate.util import (
     SharedMemoryFrameManager,
@@ -206,7 +209,8 @@ class TrackedObject:
             > self.camera_config.detect.stationary.threshold,
             "motionless_count": self.obj_data["motionless_count"],
             "position_changes": self.obj_data["position_changes"],
-            "close_contacts": self.obj_data["close_contacts"],
+            # TODO: look into passing custom encoder to peewee to serialize this instead of doing it here by hand
+            "close_contacts": [x.to_dict() for x in self.close_contacts.values()],
             "color": self.obj_data["color"],
             "current_zones": self.current_zones.copy(),
             "entered_zones": self.entered_zones.copy(),
@@ -365,6 +369,15 @@ def zone_filtered(obj: TrackedObject, object_config):
     return False
 
 
+# TODO: implement
+class TrackedObjectCloseContact(TrackedObject):
+    def __init__(
+        self, camera, colormap, camera_config: CameraConfig, frame_cache, obj_data
+    ):
+        super().__init__(camera, colormap, camera_config, frame_cache, obj_data)
+        self.close_contact = True
+
+
 # Maintains the state of a camera
 class CameraState:
     def __init__(
@@ -377,6 +390,7 @@ class CameraState:
         self.best_objects: dict[str, TrackedObject] = {}
         self.object_counts = defaultdict(int)
         self.tracked_objects: dict[str, TrackedObject] = {}
+        self.close_contacts: dict[str, CloseContact] = {}
         self.frame_cache = {}
         self.zone_objects = defaultdict(list)
         self._current_frame = np.zeros(self.camera_config.frame_shape_yuv, np.uint8)
@@ -458,19 +472,29 @@ class CameraState:
                     (0, 0, 255),
                     2,
                 )
+        # if draw_options.get("close_contacts"):
+        #     objects = tracked_objects.values()
+        #     for obj in objects:
+        #         if obj["frame_time"] == frame_time:
+        #             for contact in obj["close_contacts"].values():
+        #                 if contact.last_frame_time == frame_time:
+        #                     draw_line_between_bounding_boxes(
+        #                         frame_copy,
+        #                         tracked_objects[contact.id1]["box"],
+        #                         tracked_objects[contact.id2]["box"],
+        #                         contact.last_distance,
+        #                         self.camera_config.close_contacts.distance_threshold,
+        #                     )
         if draw_options.get("close_contacts"):
-            objects = tracked_objects.values()
-            for obj in objects:
-                if obj["frame_time"] == frame_time:
-                    for contact in obj["close_contacts"].values():
-                        if contact.last_frame_time == frame_time:
-                            draw_line_between_bounding_boxes(
-                                frame_copy,
-                                tracked_objects[contact.id1]["box"],
-                                tracked_objects[contact.id2]["box"],
-                                contact.last_distance,
-                                self.camera_config.close_contacts.distance_threshold,
-                            )
+            for cc in self.close_contacts.values():
+                if cc.last_frame_time == frame_time:
+                    draw_line_between_bounding_boxes(
+                        frame_copy,
+                        tracked_objects[cc.id1]["box"],
+                        tracked_objects[cc.id2]["box"],
+                        cc.last_distance,
+                        self.camera_config.close_contacts.distance_threshold,
+                    )
 
         if draw_options.get("timestamp"):
             color = self.camera_config.timestamp_style.color
@@ -492,12 +516,57 @@ class CameraState:
     def on(self, event_type: str, callback: Callable[[dict], None]):
         self.callbacks[event_type].append(callback)
 
-    def update(self, frame_time, current_detections, motion_boxes, regions):
+    def update(
+        self,
+        frame_time,
+        current_detections,
+        current_close_contacts,
+        motion_boxes,
+        regions,
+    ):
         # get the new frame
         frame_id = f"{self.name}{frame_time}"
         current_frame = self.frame_manager.get(
             frame_id, self.camera_config.frame_shape_yuv
         )
+
+        close_contacts = self.close_contacts.copy()
+        current_ids = set(current_close_contacts.keys())
+        previous_ids = set(close_contacts.keys())
+        removed_ids = previous_ids.difference(current_ids)
+        new_ids = current_ids.difference(previous_ids)
+        updated_ids = current_ids.intersection(previous_ids)
+
+        for id in new_ids:
+            id1, id2 = id.split("|")
+            try:
+                self.tracked_objects[id1].close_contacts[id] = current_close_contacts[
+                    id
+                ]
+                self.tracked_objects[id2].close_contacts[id] = current_close_contacts[
+                    id
+                ]
+            except KeyError:
+                continue
+            # new_obj = close_contacts[id] = CloseContact(
+            #     id[0], id[1], obj_data=current_close_contacts[id]
+            # )
+
+            # TODO: Should we implement this here or is deleting events without close contacts after ending them sufficient?s
+            # # We should not create a new event if the object is detected, but only when a new close contact is detected
+            # if self.camera_config.record.retain.mode != RetainModeEnum.close_contacts:
+            # call event handlers
+            # for c in self.callbacks["start"]:
+            #     c(self.name, new_obj, frame_time)
+
+        for id in removed_ids:
+            id1, id2 = id.split("|")
+            try:
+                self.tracked_objects[id1].close_contacts[id] = close_contacts[id]
+                self.tracked_objects[id2].close_contacts[id] = close_contacts[id]
+            except KeyError:
+                continue
+        self.close_contacts = current_close_contacts
 
         tracked_objects = self.tracked_objects.copy()
         current_ids = set(current_detections.keys())
@@ -514,7 +583,9 @@ class CameraState:
                 self.frame_cache,
                 current_detections[id],
             )
-
+            # TODO: Should we implement this here or is deleting events without close contacts after ending them sufficient?s
+            # # We should not create a new event if the object is detected, but only when a new close contact is detected
+            # if self.camera_config.record.retain.mode != RetainModeEnum.close_contacts:
             # call event handlers
             for c in self.callbacks["start"]:
                 c(self.name, new_obj, frame_time)
@@ -654,12 +725,11 @@ class CameraState:
             self.previous_frame_id = frame_id
 
 
-# TODO: move to more appropriate location
-def serialize_sets(obj):
-    if isinstance(obj, set):
-        return list(obj)
-
-    return obj
+class CustomEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, CloseContact):
+            return {key: value for key, value in obj.__dict__.items()}
+        return super().default(obj)
 
 
 class TrackedObjectProcessor(threading.Thread):
@@ -704,7 +774,7 @@ class TrackedObjectProcessor(threading.Thread):
             self.dispatcher.publish(
                 "events",
                 # json.dumps(message, default=serialize_sets),
-                json.dumps(message, default=lambda o: o.__dict__),
+                json.dumps(message, cls=CustomEncoder),
                 retain=False,
             )
             obj.previous = after
@@ -761,7 +831,7 @@ class TrackedObjectProcessor(threading.Thread):
                 }
                 self.dispatcher.publish(
                     "events",
-                    json.dumps(message, default=lambda o: o.__dict__),
+                    json.dumps(message, cls=CustomEncoder),
                     retain=False,
                 )
 
@@ -942,6 +1012,7 @@ class TrackedObjectProcessor(threading.Thread):
                     camera,
                     frame_time,
                     current_tracked_objects,
+                    current_close_contacts,
                     motion_boxes,
                     regions,
                 ) = self.tracked_objects_queue.get(True, 10)
@@ -951,7 +1022,11 @@ class TrackedObjectProcessor(threading.Thread):
             camera_state = self.camera_states[camera]
 
             camera_state.update(
-                frame_time, current_tracked_objects, motion_boxes, regions
+                frame_time,
+                current_tracked_objects,
+                current_close_contacts,
+                motion_boxes,
+                regions,
             )
 
             self.update_mqtt_motion(camera, frame_time, motion_boxes)
@@ -959,6 +1034,11 @@ class TrackedObjectProcessor(threading.Thread):
             tracked_objects = [
                 o.to_dict() for o in camera_state.tracked_objects.values()
             ]
+
+            # close_contacts = [
+            #     o.to_dict() for o in camera_state.close_contacts.values()
+            # ]
+            # TODO: Implement this for close contacts
 
             self.video_output_queue.put(
                 (

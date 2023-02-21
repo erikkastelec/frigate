@@ -596,6 +596,15 @@ def events():
         Event.retain_indefinitely,
         Event.sub_label,
         Event.top_score,
+        # TODO: remove after dev
+        Event.close_contacts,
+        Event.ratio,
+        Event.region,
+        Event.thumbnail_box,
+        Event.false_positive,
+        Event.end_time,
+        Event.box,
+        Event.area,
     ]
 
     if camera != "all":

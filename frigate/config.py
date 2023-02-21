@@ -185,6 +185,10 @@ class CloseContactsConfig(FrigateBaseModel):
         default=2.0, title="Distance threshold in meters."
     )
     time_threshold: float = Field(default=5.0, title="Time threshold in seconds.")
+    max_disappeared: int = Field(
+        default=10,
+        title="Maximum number of frames the object can dissapear before detection ends.",
+    )
 
 
 class RuntimeMotionConfig(MotionConfig):

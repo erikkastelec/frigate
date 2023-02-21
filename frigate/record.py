@@ -255,6 +255,7 @@ class RecordingMaintainer(threading.Thread):
                 ]
             )
             close_contacts_count += len([o["close_contacts"] for o in frame[1]])
+
             # logger.error([o["close_contacts"] for o in frame[3]])
             # close_contacts_count += sum(len(o["close_contacts"]) for o in frame[2])
 
@@ -276,13 +277,14 @@ class RecordingMaintainer(threading.Thread):
         )
 
         # check if the segment shouldn't be stored
-
-        if (store_mode == RetainModeEnum.motion and motion_count == 0) or (
-            store_mode == RetainModeEnum.active_objects
-            and active_count == 0
+        # TODO - REMOVE or active_count == 0
+        if (
+            (store_mode == RetainModeEnum.motion and motion_count == 0)
+            or (store_mode == RetainModeEnum.active_objects and active_count == 0)
             or (
                 store_mode == RetainModeEnum.close_contacts
                 and close_contacts_count == 0
+                or active_count == 0
             )
         ):
             Path(cache_path).unlink(missing_ok=True)

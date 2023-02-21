@@ -39,7 +39,7 @@ from frigate.util import (
     yuv_region_2_bgr,
     yuv_region_2_yuv,
 )
-from frigate.close_contacts import CloseContactsDetector, CloseContact
+from frigate.close_contacts import CloseContactsTracker, CloseContact
 
 logger = logging.getLogger(__name__)
 
@@ -451,17 +451,19 @@ def track_camera(
         motion_threshold,
         motion_contour_area,
     )
+
     object_detector = RemoteObjectDetector(
         name, labelmap, detection_queue, result_connection, model_config
     )
 
-    object_tracker = ObjectTracker(config.detect)
+    close_contacts_tracker = CloseContactsTracker(config)
+
+    # TODO: Is there a better way than to pass close_contacts_tracker to ObjectTracker?
+    object_tracker = ObjectTracker(config.detect, close_contacts_tracker)
     if config.detect.tracker == "sort":
-        object_tracker = SortObjectTracker(config.detect)
+        object_tracker = SortObjectTracker(config.detect, close_contacts_tracker)
 
     frame_manager = SharedMemoryFrameManager()
-
-    close_contacts_detector = CloseContactsDetector(config)
 
     process_frames(
         name,
@@ -470,7 +472,7 @@ def track_camera(
         model_config,
         config.detect,
         frame_manager,
-        close_contacts_detector,
+        close_contacts_tracker,
         motion_detector,
         object_detector,
         object_tracker,
@@ -569,11 +571,11 @@ def process_frames(
     model_config,
     detect_config: DetectConfig,
     frame_manager: FrameManager,
-    close_contacts_detector: CloseContactsDetector,
+    close_contacts_tracker: CloseContactsTracker,
     motion_detector: MotionDetector,
     object_detector: RemoteObjectDetector,
     # object_tracker: ObjectTracker,
-    object_tracker: SortObjectTracker,
+    object_tracker,
     detected_objects_queue: mp.Queue,
     process_info: dict,
     objects_to_track: list[str],
@@ -841,14 +843,8 @@ def process_frames(
                 # object_tracker.update()
 
             # Depends on object_tracker having already consolidated and matched objects.
-            (
-                close_contacts_objects,
-                non_close_contacts_objects,
-            ) = close_contacts_detector.detect(
+            close_contacts_tracker.update_close_contacts(
                 object_tracker.tracked_objects, frame_time
-            )
-            object_tracker.update_close_contacts(
-                close_contacts_objects, non_close_contacts_objects, frame_time
             )
 
         # add to the queue if not full
@@ -863,6 +859,7 @@ def process_frames(
                     camera_name,
                     frame_time,
                     object_tracker.tracked_objects,
+                    close_contacts_tracker.close_contacts,
                     motion_boxes,
                     regions,
                 )

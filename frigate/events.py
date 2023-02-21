@@ -100,6 +100,7 @@ class EventProcessor(threading.Thread):
                     area=event_data["area"],
                     has_clip=event_data["has_clip"],
                     has_snapshot=event_data["has_snapshot"],
+                    close_contacts=event_data["close_contacts"],
                 ).execute()
 
             elif event_type == "update" and should_update_db(
@@ -123,6 +124,7 @@ class EventProcessor(threading.Thread):
                     ratio=event_data["ratio"],
                     has_clip=event_data["has_clip"],
                     has_snapshot=event_data["has_snapshot"],
+                    close_contacts=event_data["close_contacts"],
                 ).where(Event.id == event_data["id"]).execute()
 
             elif event_type == "end":
@@ -144,6 +146,7 @@ class EventProcessor(threading.Thread):
                         ratio=event_data["ratio"],
                         has_clip=event_data["has_clip"],
                         has_snapshot=event_data["has_snapshot"],
+                        close_contacts=event_data["close_contacts"],
                     ).where(Event.id == event_data["id"]).execute()
                 else:
                     # Event ended after clip & snapshot disabled,
@@ -286,7 +289,6 @@ class EventCleanup(threading.Thread):
 
         select distinct id, camera, has_snapshot, has_clip from grouped_events
         where copy_number > 1;"""
-
         duplicate_events = Event.raw(duplicate_query)
         for event in duplicate_events:
             logger.debug(f"Removing duplicate: {event.id}")

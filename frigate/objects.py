@@ -16,7 +16,7 @@ from frigate.config import DetectConfig
 from frigate.util import intersection_over_union, generate_random_color
 from frigate.close_contacts import CloseContact
 from typing import Dict, List, Tuple
-
+from frigate.close_contacts import CloseContactsTracker
 from frigate.sort_tracker import *
 import logging
 
@@ -24,12 +24,15 @@ logger = logging.getLogger(__name__)
 
 
 class ObjectTracker:
-    def __init__(self, config: DetectConfig):
+    def __init__(
+        self, config: DetectConfig, close_contacts_tracker: CloseContactsTracker
+    ):
         self.tracked_objects = {}
         self.disappeared = {}
         self.positions = {}
         self.max_disappeared = config.max_disappeared
         self.detect_config = config
+        self.close_contacts_tracker = close_contacts_tracker
 
     def register(self, index, obj):
         rand_id = "".join(random.choices(string.ascii_lowercase + string.digits, k=6))
@@ -38,8 +41,6 @@ class ObjectTracker:
         obj["start_time"] = obj["frame_time"]
         obj["motionless_count"] = 0
         obj["position_changes"] = 0
-        # TODO: check if needed
-        obj["close_contacts"] = {}
         obj["color"] = generate_random_color()
         self.tracked_objects[id] = obj
         self.disappeared[id] = 0
@@ -55,10 +56,11 @@ class ObjectTracker:
         }
 
     def deregister(self, id):
-        # Delete close contacts
         try:
-            for contact in self.tracked_objects[id]["close_contacts"].values():
-                del self.tracked_objects[contact.id2]["close_contacts"][contact.id1]
+            # Delete close contacts
+            self.close_contacts_tracker.deregister(
+                id, self.tracked_objects[id]["frame_time"]
+            )
             del self.tracked_objects[id]
             del self.disappeared[id]
         except KeyError as e:
@@ -109,70 +111,6 @@ class ObjectTracker:
             position["ymax"] = np.percentile(position["ymaxs"], 85)
 
         return True
-
-    def update_close_contacts(
-        self,
-        close_objects: list(tuple((string, string, float))),
-        non_close_objects: list(tuple((string, string, float))),
-        frame_time: datetime.datetime,
-    ):
-        if close_objects:
-            for id1, id2, distance in close_objects:
-                # TODO: clean up, could probably use an update method for CloseContact
-
-                # Update last distance if detected in close objects and frame time if rediscovered contact
-
-                try:
-                    cc = self.tracked_objects[id1]["close_contacts"][id2]
-                    cc.last_distance = distance
-                    cc.last_frame_time = frame_time
-                    # Do not update if not None so we can track the time from start of the contact
-                    if not cc.frame_time:
-                        cc.frame_time = frame_time
-                except KeyError:
-                    self.tracked_objects[id1]["close_contacts"][id2] = CloseContact(
-                        id1, id2, distance, frame_time
-                    )
-
-                try:
-                    cc = self.tracked_objects[id2]["close_contacts"][id1]
-                    cc.last_distance = distance
-                    cc.last_frame_time = frame_time
-                    if not cc.frame_time:
-                        cc.frame_time = frame_time
-                except KeyError:
-                    self.tracked_objects[id2]["close_contacts"][id1] = CloseContact(
-                        id2, id1, distance, frame_time
-                    )
-
-        if non_close_objects:
-            for id1, id2, distance in non_close_objects:
-                try:
-                    # Calculate the time from last close contact to non contact now
-                    cc = self.tracked_objects[id1]["close_contacts"][id2]
-                    if cc.frame_time:
-                        time_from_last_contact = frame_time - cc.frame_time
-                        if cc.contact_time:
-                            cc.contact_time += time_from_last_contact
-                        else:
-                            cc.contact_time = time_from_last_contact
-
-                    # Reset the frame time to None so we know it is not in close contact
-                    cc.frame_time = None
-                except KeyError:
-                    continue
-
-                try:
-                    cc = self.tracked_objects[id2]["close_contacts"][id1]
-                    if cc.frame_time:
-                        time_from_last_contact = frame_time - cc.frame_time
-                        if cc.contact_time:
-                            cc.contact_time += time_from_last_contact
-                        else:
-                            cc.contact_time = time_from_last_contact
-                    cc.frame_time = None
-                except KeyError:
-                    continue
 
     def is_expired(self, id):
         obj = self.tracked_objects[id]
@@ -331,8 +269,14 @@ class ObjectTracker:
 
 
 class SortObjectTracker(ObjectTracker):
-    def __init__(self, config: DetectConfig, min_hits=5, iou_threshold=0.3):
-        super().__init__(config)
+    def __init__(
+        self,
+        config: DetectConfig,
+        close_contacts_tracker: CloseContactsTracker,
+        min_hits=5,
+        iou_threshold=0.3,
+    ):
+        super().__init__(config, close_contacts_tracker)
         # TODO: move this to configuration file
         self.min_hits = min_hits
         self.iou_threshold = iou_threshold
