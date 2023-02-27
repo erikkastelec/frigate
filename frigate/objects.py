@@ -273,7 +273,7 @@ class SortObjectTracker(ObjectTracker):
         self,
         config: DetectConfig,
         close_contacts_tracker: CloseContactsTracker,
-        min_hits=5,
+        min_hits=10,
         iou_threshold=0.3,
     ):
         super().__init__(config, close_contacts_tracker)

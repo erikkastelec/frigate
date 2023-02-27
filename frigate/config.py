@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -188,6 +188,28 @@ class CloseContactsConfig(FrigateBaseModel):
     max_disappeared: int = Field(
         default=10,
         title="Maximum number of frames the object can dissapear before detection ends.",
+    )
+
+
+class CameraRelationsConfigItem(FrigateBaseModel):
+    camera_name: str = Field(
+        ...,
+        title="Name of the camera.",
+    )
+    relation_attributes: Dict[str, Any] = Field(
+        default={},
+        title="Attributes of the camera relation.",
+    )
+
+
+class CameraRelationsConfig(FrigateBaseModel):
+    first_encounter_cameras: Optional[List[str]] = Field(
+        default=[],
+        title="Names of cameras designated as the first encounter cameras.",
+    )
+    camera_relations = Field(
+        default={},
+        title="Dictionary of camera relations.",
     )
 
 
@@ -908,6 +930,10 @@ class FrigateConfig(FrigateBaseModel):
     close_contacts: CloseContactsConfig = Field(
         default_factory=CloseContactsConfig,
         title="Global close contacts configuration.",
+    )
+    camera_relations: CameraRelationsConfig = Field(
+        default_factory=CameraRelationsConfig,
+        title="Global relations configuration.",
     )
     cameras: Dict[str, CameraConfig] = Field(title="Camera configuration.")
     timestamp_style: TimestampStyleConfig = Field(
