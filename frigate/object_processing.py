@@ -1003,7 +1003,7 @@ class TrackedObjectProcessor(threading.Thread):
                     current_close_contacts,
                     motion_boxes,
                     regions,
-                ) = self.tracked_objects_queue.get(True, 10)
+                ) = self.tracked_objects_queue.get(True, 1)
             except queue.Empty:
                 continue
 

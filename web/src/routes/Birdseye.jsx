@@ -10,7 +10,10 @@ import useSWR from 'swr';
 export default function Birdseye() {
   const { data: config } = useSWR('config');
 
-  const [viewSource, setViewSource, sourceIsLoaded] = usePersistence('birdseye-source', 'mse');
+  const [viewSource, setViewSource, sourceIsLoaded] = usePersistence(
+    'birdseye-source', 
+    getDefaultLiveMode(config)
+  );
   const sourceValues = ['mse', 'webrtc', 'jsmpeg'];
 
   if (!config || !sourceIsLoaded) {
@@ -18,7 +21,7 @@ export default function Birdseye() {
   }
 
   let player;
-  if (viewSource == 'mse' && config.restream.birdseye) {
+  if (viewSource == 'mse' && config.birdseye.restream) {
     if ('MediaSource' in window) {
       player = (
         <Fragment>
@@ -36,7 +39,7 @@ export default function Birdseye() {
         </Fragment>
       );
     }
-  } else if (viewSource == 'webrtc' && config.restream.birdseye) {
+  } else if (viewSource == 'webrtc' && config.birdseye.restream) {
     player = (
       <Fragment>
         <div className="max-w-5xl">
@@ -61,7 +64,7 @@ export default function Birdseye() {
           Birdseye
         </Heading>
 
-        {config.restream.birdseye && (
+        {config.birdseye.restream && (
           <select
             className="basis-1/8 cursor-pointer rounded dark:bg-slate-800"
             value={viewSource}
@@ -79,4 +82,17 @@ export default function Birdseye() {
       {player}
     </div>
   );
+}
+
+
+function getDefaultLiveMode(config) {
+  if (config) {
+    if (config.birdseye.restream) {
+      return config.ui.live_mode;
+    }
+
+    return 'jsmpeg';
+  }
+
+  return undefined;
 }

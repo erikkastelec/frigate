@@ -3,6 +3,7 @@ import multiprocessing as mp
 from multiprocessing.queues import Queue
 from multiprocessing.synchronize import Event as MpEvent
 import os
+import shutil
 import signal
 import sys
 from typing import Optional
@@ -27,7 +28,6 @@ from frigate.object_processing import TrackedObjectProcessor
 from frigate.output import output_frames
 from frigate.plus import PlusApi
 from frigate.record import RecordingCleanup, RecordingMaintainer
-from frigate.restream import RestreamApi
 from frigate.stats import StatsEmitter, stats_init
 from frigate.storage import StorageMaintainer
 from frigate.version import VERSION
@@ -127,6 +127,9 @@ class FrigateApp:
         if not "werkzeug" in self.config.logger.logs:
             logging.getLogger("werkzeug").setLevel("ERROR")
 
+        if not "ws4py" in self.config.logger.logs:
+            logging.getLogger("ws4py").setLevel("ERROR")
+
     def init_queues(self) -> None:
         # Queues for clip processing
         self.event_queue: Queue = mp.Queue()
@@ -166,7 +169,9 @@ class FrigateApp:
         self.db.bind(models)
 
     def init_stats(self) -> None:
-        self.stats_tracking = stats_init(self.camera_metrics, self.detectors)
+        self.stats_tracking = stats_init(
+            self.config, self.camera_metrics, self.detectors
+        )
 
     def init_web_server(self) -> None:
         self.flask_app = create_app(
@@ -178,18 +183,13 @@ class FrigateApp:
             self.plus_api,
         )
 
-    def init_restream(self) -> None:
-        self.restream = RestreamApi(self.config)
-        self.restream.add_cameras()
-
     def init_dispatcher(self) -> None:
         comms: list[Communicator] = []
 
         if self.config.mqtt.enabled:
             comms.append(MqttClient(self.config))
 
-        self.ws_client = WebSocketClient(self.config)
-        comms.append(self.ws_client)
+        comms.append(WebSocketClient(self.config))
         self.dispatcher = Dispatcher(self.config, self.camera_metrics, comms)
 
     def start_detectors(self) -> None:
@@ -338,6 +338,22 @@ class FrigateApp:
         self.frigate_watchdog = FrigateWatchdog(self.detectors, self.stop_event)
         self.frigate_watchdog.start()
 
+    def check_shm(self) -> None:
+        available_shm = round(shutil.disk_usage("/dev/shm").total / 1000000, 1)
+        min_req_shm = 30
+
+        for _, camera in self.config.cameras.items():
+            min_req_shm += round(
+                (camera.detect.width * camera.detect.height * 1.5 * 9 + 270480)
+                / 1048576,
+                1,
+            )
+
+        if available_shm < min_req_shm:
+            logger.warning(
+                f"The current SHM size of {available_shm}MB is too small, recommend increasing it to at least {min_req_shm}MB."
+            )
+
     def start(self) -> None:
         self.init_logger()
         logger.info(f"Starting Frigate ({VERSION})")
@@ -371,7 +387,6 @@ class FrigateApp:
             print(e)
             self.log_process.terminate()
             sys.exit(1)
-        self.init_restream()
         self.start_detectors()
         self.start_video_output_processor()
         self.start_detected_frames_processor()
@@ -386,6 +401,7 @@ class FrigateApp:
         self.start_recording_cleanup()
         self.start_stats_emitter()
         self.start_watchdog()
+        self.check_shm()
         # self.zeroconf = broadcast_zeroconf(self.config.mqtt.client_id)
 
         def receiveSignal(signalNumber: int, frame: Optional[FrameType]) -> None:
@@ -405,7 +421,17 @@ class FrigateApp:
         logger.info(f"Stopping...")
         self.stop_event.set()
 
-        self.ws_client.stop()
+        for detector in self.detectors.values():
+            detector.stop()
+
+        # Empty the detection queue and set the events for all requests
+        while not self.detection_queue.empty():
+            connection_id = self.detection_queue.get(timeout=1)
+            self.detection_out_events[connection_id].set()
+        self.detection_queue.close()
+        self.detection_queue.join_thread()
+
+        self.dispatcher.stop()
         self.detected_frames_processor.join()
         self.event_processor.join()
         self.event_cleanup.join()
@@ -415,10 +441,20 @@ class FrigateApp:
         self.frigate_watchdog.join()
         self.db.stop()
 
-        for detector in self.detectors.values():
-            detector.stop()
-
         while len(self.detection_shms) > 0:
             shm = self.detection_shms.pop()
             shm.close()
             shm.unlink()
+
+        for queue in [
+            self.event_queue,
+            self.event_processed_queue,
+            self.video_output_queue,
+            self.detected_frames_queue,
+            self.recordings_info_queue,
+            self.log_queue,
+        ]:
+            while not queue.empty():
+                queue.get_nowait()
+            queue.close()
+            queue.join_thread()
