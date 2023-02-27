@@ -22,7 +22,11 @@ from frigate.object_detection import ObjectDetectProcess
 logger = logging.getLogger(__name__)
 
 
-def get_latest_version() -> str:
+def get_latest_version(config: FrigateConfig) -> str:
+
+    if not config.telemetry.version_check:
+        return "disabled"
+
     try:
         request = requests.get(
             "https://api.github.com/repos/blakeblackshear/frigate/releases/latest",
@@ -40,6 +44,7 @@ def get_latest_version() -> str:
 
 
 def stats_init(
+    config: FrigateConfig,
     camera_metrics: dict[str, CameraMetricsTypes],
     detectors: dict[str, ObjectDetectProcess],
 ) -> StatsTrackingTypes:
@@ -47,7 +52,8 @@ def stats_init(
         "camera_metrics": camera_metrics,
         "detectors": detectors,
         "started": int(time.time()),
-        "latest_frigate_version": get_latest_version(),
+        "latest_frigate_version": get_latest_version(config),
+        "last_updated": int(time.time()),
     }
     return stats_tracking
 
@@ -239,6 +245,7 @@ def stats_snapshot(
         "latest_version": stats_tracking["latest_frigate_version"],
         "storage": {},
         "temperatures": get_temperatures(),
+        "last_updated": int(time.time()),
     }
 
     for path in [RECORD_DIR, CLIPS_DIR, CACHE_DIR, "/dev/shm"]:
@@ -276,8 +283,10 @@ class StatsEmitter(threading.Thread):
     def run(self) -> None:
         time.sleep(10)
         while not self.stop_event.wait(self.config.mqtt.stats_interval):
+            logger.debug("Starting stats collection")
             stats = stats_snapshot(
                 self.config, self.stats_tracking, self.hwaccel_errors
             )
             self.dispatcher.publish("stats", json.dumps(stats), retain=False)
-        logger.info(f"Exiting watchdog...")
+            logger.debug("Finished stats collection")
+        logger.info(f"Exiting stats emitter...")
