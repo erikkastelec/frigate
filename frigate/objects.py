@@ -347,7 +347,6 @@ class SortObjectTracker(ObjectTracker):
         ret = []
         for t, trk in zip(self.tracked_objects.keys(), trks):
             pos = self.tracked_objects[t]["tracker"].predict()[0]
-            # pos = self.trackers[t].predict()[0]
             trk[:] = [pos[0], pos[1], pos[2], pos[3], 0]
             if np.any(np.isnan(pos)):
                 self.deregister(t)
@@ -355,10 +354,7 @@ class SortObjectTracker(ObjectTracker):
         # used to map associate_detection_to_trackers to the correct object
         tmp_mapper = list(zip(self.tracked_objects.keys(), trks))
         trks = np.ma.compress_rows(np.ma.masked_invalid(trks))
-        # for t in reversed(to_del):
-        #     self.deregister(self.sort_to_object_tracker_map[t])
-        #     self.trackers.pop(t)
-        #     del self.sort_to_object_tracker_map[t]
+
         matched, unmatched_dets, unmatched_trks = associate_detections_to_trackers(
             dets, trks, self.iou_threshold
         )
@@ -366,44 +362,22 @@ class SortObjectTracker(ObjectTracker):
         for m in matched:
             self.tracked_objects[tmp_mapper[m[1]][0]]["tracker"].update(dets[m[0], :])
             self.update_tracked_object(tmp_mapper[m[1]][0], new_objects[m[0]])
-            # self.trackers[m[1]].update(dets[m[0], :])
-            # try:
-            #     self.update_tracked_object(
-            #         self.sort_to_object_tracker_map[m[1]], new_objects[m[0]]
-            #     )
-            # except KeyError:
-            #     print("hello")
+
         # create and initialise new trackers for unmatched detections
         for i in unmatched_dets:
-            # trk = KalmanBoxTracker(dets[i, :])
-            # self.trackers.append(trk)
             new_objects[i]["tracker"] = KalmanBoxTracker(dets[i, :])
             self.register(-1, new_objects[i])
-            # self.sort_to_object_tracker_map[len(self.trackers) - 1] = id_to_map
-        # i = len(self.tracked_objects)
         to_del = []
         for key in self.tracked_objects.keys():
-            # for trk in reversed(self.trackers):
-            # d = trk.get_state()[0]
-            # if (trk.time_since_update < 1) and (
-            #     trk.hit_streak >= self.min_hits or self.frame_count <= self.min_hits
-            # ):
-            #     ret.append(np.concatenate((d, [trk.id + 1])).reshape(1, -1))
-            # i -= 1
-            # remove dead tracklet
+
             if (
                 self.tracked_objects[key]["tracker"].time_since_update
                 > self.max_disappeared
             ):
                 to_del.append(key)
-                # self.deregister(key)
-                # self.trackers.pop(i)
-                # del self.sort_to_object_tracker_map[i]
+
         for key in to_del:
             self.deregister(key)
-        # if len(ret) > 0:
-        #     return np.concatenate(ret)
-        # return np.empty((0, 5))
 
     def update_frame_times(self, frame_time):
         for id in list(self.tracked_objects.keys()):

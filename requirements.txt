@@ -1,2 +1,3 @@
 scikit-build == 0.16.4
 nvidia-pyindex
+networkx
