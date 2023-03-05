@@ -17,3 +17,5 @@ web/coverage
 core
 !/web/**/*.ts
 .idea/*
+debug_backup
+debug_backup2

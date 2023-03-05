@@ -8,11 +8,11 @@ services:
       - "110" # render
       - "44"  # video
       - "46"  # plugdev
-    shm_size: "256mb"
+    shm_size: "1024mb"
     build:
       context: .
       # Use target devcontainer-trt for TensorRT dev
-      target: devcontainer
+      target: devcontainer-trt
     deploy:
           resources:
               reservations:
@@ -32,6 +32,8 @@ services:
       # Create the trt-models folder using the documented method of generating TRT models
       # - ./debug/trt-models:/trt-models
       - /dev/bus/usb:/dev/bus/usb
+      - /home/erikkastelec/re-id_datasets:/media/re-id_datasets
+      - ./trt-models:/trt-models
   mqtt:
     container_name: mqtt
     image: eclipse-mosquitto:1.6
