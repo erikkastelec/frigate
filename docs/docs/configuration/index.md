@@ -36,6 +36,23 @@ It is not recommended to copy this full configuration file. Only specify values 
 
 :::
 
+**Note:** The following values will be replaced at runtime by using environment variables
+
+- `{FRIGATE_MQTT_USER}`
+- `{FRIGATE_MQTT_PASSWORD}`
+- `{FRIGATE_RTSP_USER}`
+- `{FRIGATE_RTSP_PASSWORD}`
+
+for example:
+```yaml
+mqtt:
+  user: "{FRIGATE_MQTT_USER}"
+  password: "{FRIGATE_MQTT_PASSWORD}"
+```
+```yaml
+- path: rtsp://{FRIGATE_RTSP_USER}:{FRIGATE_RTSP_PASSWORD}@10.0.10.10:8554/unicast
+```
+
 ```yaml
 mqtt:
   # Optional: Enable mqtt server (default: shown below)
@@ -490,7 +507,7 @@ ui:
   # Options are browser, 12hour, or 24hour (default: shown below)
   time_format: browser
   # Optional: Set the date style for a specified length.
-  # Options are: full, long, medium, sort
+  # Options are: full, long, medium, short
   # Examples:
   #    short: 2/11/23
   #    medium: Feb 11, 2023
@@ -498,7 +515,7 @@ ui:
   # (default: shown below).
   date_style: short
   # Optional: Set the time style for a specified length.
-  # Options are: full, long, medium, sort
+  # Options are: full, long, medium, short
   # Examples:
   #    short: 8:14 PM
   #    medium: 8:15:22 PM
