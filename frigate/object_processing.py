@@ -475,12 +475,12 @@ class CameraState:
 
         if draw_options.get("close_contacts"):
             for cc in self.close_contacts.values():
-                if cc.last_frame_time == frame_time:
+                if cc.frame_times[-1] == frame_time:
                     draw_line_between_bounding_boxes(
                         frame_copy,
                         tracked_objects[cc.id1]["box"],
                         tracked_objects[cc.id2]["box"],
-                        cc.last_distance,
+                        cc.distances[-1],
                         self.camera_config.close_contacts.distance_threshold,
                     )
 
@@ -518,14 +518,8 @@ class CameraState:
             frame_id, self.camera_config.frame_shape_yuv
         )
 
-        close_contacts = self.close_contacts.copy()
-        current_ids = set(current_close_contacts.keys())
-        previous_ids = set(close_contacts.keys())
-        removed_ids = previous_ids.difference(current_ids)
-        new_ids = current_ids.difference(previous_ids)
-        updated_ids = current_ids.intersection(previous_ids)
-
-        for id in new_ids:
+        # Add close contacts to their respective objects so they can be writen to the db as part of the event
+        for id in current_close_contacts:
             id1, id2 = id.split("|")
             try:
                 self.tracked_objects[id1].close_contacts[id] = current_close_contacts[
@@ -536,24 +530,7 @@ class CameraState:
                 ]
             except KeyError:
                 continue
-            # new_obj = close_contacts[id] = CloseContact(
-            #     id[0], id[1], obj_data=current_close_contacts[id]
-            # )
 
-            # TODO: Should we implement this here or is deleting events without close contacts after ending them sufficient?s
-            # # We should not create a new event if the object is detected, but only when a new close contact is detected
-            # if self.camera_config.record.retain.mode != RetainModeEnum.close_contacts:
-            # call event handlers
-            # for c in self.callbacks["start"]:
-            #     c(self.name, new_obj, frame_time)
-
-        for id in removed_ids:
-            id1, id2 = id.split("|")
-            try:
-                self.tracked_objects[id1].close_contacts[id] = close_contacts[id]
-                self.tracked_objects[id2].close_contacts[id] = close_contacts[id]
-            except KeyError:
-                continue
         self.close_contacts = current_close_contacts
 
         tracked_objects = self.tracked_objects.copy()
@@ -609,8 +586,13 @@ class CameraState:
         for id in removed_ids:
             # publish events to mqtt
             removed_obj = tracked_objects[id]
+            for cc in removed_obj.close_contacts.values():
+                removed_obj.close_contacts[
+                    cc.id
+                ].contact_time = cc.calculate_contact_time()
             if not "end_time" in removed_obj.obj_data:
                 removed_obj.obj_data["end_time"] = frame_time
+
                 for c in self.callbacks["end"]:
                     c(self.name, removed_obj, frame_time)
 
@@ -1003,7 +985,7 @@ class TrackedObjectProcessor(threading.Thread):
                     current_close_contacts,
                     motion_boxes,
                     regions,
-                ) = self.tracked_objects_queue.get(True, 1)
+                ) = self.tracked_objects_queue.get(True, 10)
             except queue.Empty:
                 continue
 
